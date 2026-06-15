@@ -139,7 +139,7 @@ export default function LoginPage() {
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </div>
-        <p style={{ textAlign:'center', fontSize:10, color:'rgba(255,255,255,0.25)', marginTop:22 }}>Default: admin / admin123</p>
+
       </div>
     </div>
   );

@@ -120,7 +120,7 @@ function ProjectCard({ project, onProjectEdit, onUpdate }) {
   const progressColor = donePeriods === totalPeriods && totalPeriods > 0 ? '#16a34a' : donePeriods > 0 ? '#f59e0b' : '#9ca3af';
 
   const [showBilled, setShowBilled]   = useState(false);
-  const [showPeriods, setShowPeriods] = useState(true);
+  const [showPeriods, setShowPeriods] = useState(false);
 
   const [terminModal, setTerminModal] = useState({ open:false, termin:null });
 
