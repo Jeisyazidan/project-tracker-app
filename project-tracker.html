@@ -1,0 +1,2356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    /* Light mode — based on LightTheme SVG palette */
+    --bg: #f5f5f5; --surface: #ffffff; --surface2: #fafafa;
+    --border: #e5e5e5; --border2: #f0f0f0;
+    --text: #171717; --text-muted: #525252; --text-subtle: #737373; --text-light: #a3a3a3;
+    --accent: #404040; --accent-h: #262626;
+    --row-hover: #f5f5f5; --input-bg: #ffffff; --input-border: #d4d4d4;
+    --cancel-bg: #f5f5f5; --cancel-text: #404040;
+    --issue-bg: #fffbeb; --issue-border: #fde68a;
+    --pid-color: #404040; --label-color: #525252;
+  }
+  body.dark {
+    /* Dark mode — matches component's CSS variable system exactly */
+    color-scheme: dark;
+    --bg: #0d0d0d; --surface: #171717; --surface2: #262626;
+    --border: hsla(0,0%,100%,0.12); --border2: hsla(0,0%,100%,0.08);
+    --text: #f5f5f5; --text-muted: #d4d4d4; --text-subtle: #a3a3a3; --text-light: #737373;
+    --accent: #a3a3a3; --accent-h: #d4d4d4;
+    --row-hover: #262626; --input-bg: #262626; --input-border: hsla(0,0%,100%,0.12);
+    --cancel-bg: #313131; --cancel-text: #f5f5f5;
+    --issue-bg: rgba(255,255,255,0.04); --issue-border: rgba(255,255,255,0.08);
+    --pid-color: #93c5fd; --label-color: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 13px; transition: background .2s, color .2s; }
+
+  .header { background: var(--accent); color: white; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; transition: background .2s; }
+  body.dark .header { background: #171717; border-bottom: 1px solid hsla(0,0%,100%,0.08); }
+  .header h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.3px; }
+  .header .subtitle { font-size: 11px; opacity: 0.7; margin-top: 2px; }
+
+  .summary-bar { display: flex; gap: 10px; padding: 14px 20px; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .stat-card { flex: 1; min-width: 90px; background: var(--surface2); border-radius: 8px; padding: 10px 14px; border-left: 3px solid var(--accent); }
+  .stat-card.green  { border-left-color: #22c55e; }
+  .stat-card.amber  { border-left-color: #f59e0b; }
+  .stat-card.red    { border-left-color: #ef4444; }
+  .stat-card.blue   { border-left-color: #3b82f6; }
+  .stat-card.gray   { border-left-color: #9ca3af; }
+  .stat-card.purple { border-left-color: #8b5cf6; }
+  .stat-card { cursor: pointer; transition: transform .1s, box-shadow .1s; }
+  .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+  .stat-card .val { font-size: 24px; font-weight: 700; line-height: 1; }
+  .stat-card .lbl { font-size: 10px; color: var(--text-muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .toolbar { display: flex; gap: 8px; padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; align-items: center; }
+  .toolbar select, .toolbar input { padding: 6px 10px; border: 1px solid var(--input-border); border-radius: 6px; font-size: 12px; background: var(--input-bg); color: var(--text); }
+  .toolbar input { width: 200px; }
+  .btn { padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent-h); }
+  .btn-sm { padding: 4px 10px; font-size: 11px; border-radius: 5px; border: none; cursor: pointer; font-weight: 600; }
+  .btn-edit { background: #e8f0fe; color: #1e3a5f; }
+  .btn-delete { background: #fee2e2; color: #dc2626; }
+  body.dark .btn-edit   { background: #313131; color: #d4d4d4; border: 1px solid hsla(0,0%,100%,0.12); }
+  body.dark .btn-delete { background: rgba(239,68,68,0.15); color: #f87171; }
+  .toolbar-spacer { flex: 1; }
+
+  .tabs { display: flex; gap: 0; padding: 0 20px; background: var(--surface); border-bottom: 2px solid var(--border); }
+  .tab { padding: 10px 16px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; transition: color .15s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .content { padding: 16px 20px; }
+
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: var(--accent); color: white; padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+  body.dark thead th { background: #262626; color: #a3a3a3; }
+  tbody tr { border-bottom: 1px solid var(--border2); transition: background 0.1s; }
+  tbody tr:hover { background: var(--row-hover); }
+  tbody td { padding: 9px 12px; vertical-align: middle; }
+  tbody td .pid { font-weight: 700; color: var(--pid-color); font-size: 12px; font-family: monospace; }
+  tbody td .company { font-size: 11px; color: var(--text-subtle); }
+  tbody td .projname { font-weight: 600; font-size: 12px; max-width: 280px; }
+
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+  .badge-green  { background: #dcfce7; color: #16a34a; }
+  .badge-amber  { background: #fff7ed; color: #c2410c; }
+  .badge-yellow { background: #fef9c3; color: #a16207; }
+  .badge-red    { background: #fee2e2; color: #dc2626; }
+  .badge-blue   { background: #dbeafe; color: #1d4ed8; }
+  .badge-gray   { background: #f3f4f6; color: #6b7280; }
+  .badge-purple { background: #f3e8ff; color: #7c3aed; }
+  .badge-orange { background: #fff7ed; color: #c2410c; }
+  body.dark .badge-green  { background: rgba(34,197,94,0.15);  color: #4ade80; }
+  body.dark .badge-amber  { background: rgba(245,158,11,0.15); color: #fbbf24; }
+  body.dark .badge-yellow { background: rgba(234,179,8,0.15);  color: #facc15; }
+  body.dark .badge-red    { background: rgba(239,68,68,0.15);  color: #f87171; }
+  body.dark .badge-blue   { background: rgba(59,130,246,0.15); color: #60a5fa; }
+  body.dark .badge-gray   { background: rgba(163,163,163,0.12);color: #a3a3a3; }
+  body.dark .badge-purple { background: rgba(168,85,247,0.15); color: #c084fc; }
+  body.dark .badge-orange { background: rgba(249,115,22,0.15); color: #fb923c; }
+
+  .issue-count { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .issue-count.has  { background: #fee2e2; color: #dc2626; }
+  .issue-count.none { background: #f3f4f6; color: #9ca3af; }
+  body.dark .issue-count.has  { background: rgba(239,68,68,0.2); color: #f87171; }
+  body.dark .issue-count.none { background: rgba(163,163,163,0.1); color: #525252; }
+
+  .date-cell { font-size: 12px; }
+  .date-cell.overdue { color: #dc2626; font-weight: 600; }
+  .date-cell.soon    { color: #d97706; font-weight: 600; }
+  .date-cell.ok      { color: #16a34a; }
+
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: var(--surface); border-radius: 12px; padding: 24px; width: 580px; max-width: 95vw; max-height: 90vh; overflow-y: auto; border: 1px solid var(--border); }
+  .modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: var(--accent); }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group.full { grid-column: 1 / -1; }
+  .form-group label { font-size: 11px; font-weight: 600; color: var(--label-color); text-transform: uppercase; letter-spacing: 0.4px; }
+  .form-group input, .form-group select, .form-group textarea { padding: 7px 10px; border: 1px solid var(--input-border); border-radius: 6px; font-size: 13px; font-family: inherit; background: var(--input-bg); color: var(--text); }
+  .form-group textarea { resize: vertical; min-height: 60px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  .btn-cancel { background: var(--cancel-bg); color: var(--cancel-text); }
+
+  .issue-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+  .issue-item { background: var(--issue-bg); border: 1px solid var(--issue-border); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+
+  .reminder-section { background: var(--surface); border-radius: 10px; border: 1px solid var(--border); padding: 16px; margin-bottom: 12px; }
+  .reminder-section h3 { font-size: 13px; font-weight: 700; margin-bottom: 12px; color: var(--accent); }
+  .reminder-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; cursor: pointer; transition: filter .15s; }
+  .reminder-row:hover { filter: brightness(0.95); }
+  .reminder-row.overdue  { background: #fef2f2; border: 1px solid #fecaca; }
+  .reminder-row.soon     { background: #fffbeb; border: 1px solid #fde68a; }
+  .reminder-row.upcoming { background: #eff6ff; border: 1px solid #bfdbfe; }
+  body.dark .reminder-row.overdue  { background: rgba(239,68,68,0.1);   border-color: rgba(239,68,68,0.25); }
+  body.dark .reminder-row.soon     { background: rgba(245,158,11,0.1);  border-color: rgba(245,158,11,0.25); }
+  body.dark .reminder-row.upcoming { background: rgba(59,130,246,0.1);  border-color: rgba(59,130,246,0.25); }
+  .reminder-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-red    { background: #ef4444; }
+  .dot-yellow { background: #f59e0b; }
+  .dot-blue   { background: #3b82f6; }
+  .reminder-text { flex: 1; font-size: 12px; font-weight: 600; }
+  .reminder-sub  { font-size: 11px; color: var(--text-subtle); font-weight: 400; }
+  .reminder-date { font-size: 11px; font-weight: 700; }
+
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--text-light); }
+  .empty-state .icon { font-size: 36px; margin-bottom: 8px; }
+
+  /* Dark mode overrides for dynamically generated content */
+
+  /* Text color fixes */
+  body.dark [style*="color:#1e3a5f"],
+  body.dark [style*="color:#1a1a2e"],
+  body.dark [style*="color:#374151"],
+  body.dark [style*="color:#111"],
+  body.dark [style*="color:#444"] { color: var(--text) !important; }
+
+  body.dark [style*="color:#6b7280"],
+  body.dark [style*="color:#666"],
+  body.dark [style*="color:#555"],
+  body.dark [style*="color:#525252"],
+  body.dark [style*="color:#888"],
+  body.dark [style*="color:#999"] { color: var(--text-muted) !important; }
+
+  body.dark [style*="color:#9ca3af"],
+  body.dark [style*="color:#a3a3a3"],
+  body.dark [style*="color:#d1d5db"] { color: var(--text-subtle) !important; }
+
+  body.dark [style*="color:#92400e"] { color: #fbbf24 !important; }
+
+  /* Background fixes */
+  body.dark [style*="background:#fff"],
+  body.dark [style*="background: #fff"],
+  body.dark [style*="background:white"],
+  body.dark [style*="background: white"],
+  body.dark [style*="background:#ffffff"] { background: var(--surface) !important; }
+
+  body.dark [style*="background:#f8f9f"],
+  body.dark [style*="background:#f8f9fc"],
+  body.dark [style*="background:#f8f9fa"],
+  body.dark [style*="background:#fafafa"],
+  body.dark [style*="background:#f5f5f5"],
+  body.dark [style*="background:#f3f4f6"] { background: var(--surface2) !important; }
+
+  body.dark [style*="background:#f0fdf4"] { background: rgba(34,197,94,0.12) !important; }
+  body.dark [style*="background:#fef2f2"] { background: rgba(239,68,68,0.12) !important; }
+  body.dark [style*="background:#fffbeb"] { background: rgba(245,158,11,0.10) !important; }
+
+  /* Border fixes */
+  body.dark [style*="border:1px solid #d1d5db"],
+  body.dark [style*="border: 1px solid #d1d5db"],
+  body.dark [style*="border:1px solid #e"],
+  body.dark [style*="border: 1px solid #e"] { border-color: var(--border) !important; }
+
+  body.dark [style*="border:1px solid #16a34a"] { border-color: rgba(34,197,94,0.4) !important; }
+  body.dark [style*="border:1px solid #dc2626"] { border-color: rgba(239,68,68,0.4) !important; }
+  body.dark [style*="border:1px dashed #16a34a"] { border-color: rgba(34,197,94,0.4) !important; }
+
+  /* Specific element fixes */
+  body.dark select[style] { background: var(--surface2) !important; color: var(--text) !important; border-color: var(--border) !important; }
+  body.dark .content h2[style*="color:#1e3a5f"],
+  body.dark .content h3[style*="color:#1e3a5f"] { color: var(--text) !important; }
+
+  /* Stat popup & modals rendered outside .content */
+  body.dark #statPopupOverlay > div { background: var(--surface) !important; border: 1px solid var(--border); }
+  body.dark #statPopupOverlay thead tr { background: var(--surface2) !important; }
+  body.dark #statPopupOverlay [style*="color:#1a1a2e"] { color: var(--text) !important; }
+  body.dark #statPopupOverlay [style*="color:#888"],
+  body.dark #statPopupOverlay [style*="color:#666"] { color: var(--text-muted) !important; }
+  body.dark #statPopupOverlay [style*="color:#444"] { color: var(--text) !important; }
+  body.dark #statPopupOverlay [style*="border-bottom:1px solid #f0f0f0"] { border-color: var(--border2) !important; }
+
+  /* User management modal */
+  body.dark .modal [style*="background:#f8f9fc"] { background: var(--surface2) !important; }
+  body.dark .modal [style*="color:#1e3a5f"],
+  body.dark .modal [style*="color:#111"] { color: var(--text) !important; }
+  body.dark .modal [style*="color:#6b7280"],
+  body.dark .modal [style*="color:#888"] { color: var(--text-muted) !important; }
+  body.dark .modal [style*="background:#f0fdf4"] { background: rgba(34,197,94,0.12) !important; }
+  body.dark .modal [style*="background:#fef2f2"] { background: rgba(239,68,68,0.12) !important; }
+  body.dark .modal [style*="border:1px solid #e8eaf0"],
+  body.dark .modal [style*="border:1px solid #e5e7eb"] { border-color: var(--border) !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>📋 Project Tracker</h1>
+    <div class="subtitle" id="headerSub">Loading...</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <div style="font-size:11px;opacity:0.8" id="todayLabel"></div>
+    <div id="userLabel" style="font-size:11px;background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:12px;font-weight:600"></div>
+    <button id="btnManageUsers" onclick="openUserMgmt()" style="display:none;font-size:11px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;padding:4px 10px;border-radius:6px;cursor:pointer">👥 Users</button>
+    <button id="btnTheme" onclick="toggleTheme()" title="Toggle light/dark mode" style="font-size:14px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;padding:4px 9px;border-radius:6px;cursor:pointer;line-height:1">🌙</button>
+    <button onclick="doLogout()" style="font-size:11px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;padding:4px 10px;border-radius:6px;cursor:pointer">Logout</button>
+  </div>
+</div>
+
+<div class="summary-bar" id="summaryBar"></div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('projects')">Project Overview</div>
+  <div class="tab" onclick="switchTab('reminders')">🔔 Reminders</div>
+  <div class="tab" onclick="switchTab('bast')">📄 BAST Billing</div>
+  <div class="tab" onclick="switchTab('cm')">🤝 CM Meetings</div>
+  <div class="tab" onclick="switchTab('pm')">🔧 PM Meetings</div>
+  <div class="tab" id="tabAccessControl" style="display:none" onclick="switchTab('access')">🔐 Access Control</div>
+</div>
+
+<div class="toolbar">
+  <input type="text" id="searchBox" placeholder="🔍  Search PID / project / company..." oninput="renderCurrentTab()">
+  <select id="filterStatus" onchange="renderCurrentTab()">
+    <option value="">All Status</option>
+    <option value="On Track">On Track</option>
+    <option value="In Progress - Minor Issues">In Progress - Minor Issues</option>
+    <option value="In Progress - Major Issues">In Progress - Major Issues</option>
+    <option value="Completed">Completed</option>
+    <option value="Not Started">Not Started</option>
+  </select>
+  <select id="filterCompany" onchange="renderCurrentTab()">
+    <option value="">All Companies</option>
+  </select>
+  <select id="filterAdmin" onchange="renderCurrentTab()">
+    <option value="">All Project Admins</option>
+  </select>
+  <select id="filterPM" onchange="renderCurrentTab()">
+    <option value="">All Project Managers</option>
+  </select>
+  <select id="filterOM" onchange="renderCurrentTab()">
+    <option value="">All Operation Managers</option>
+  </select>
+  <div class="toolbar-spacer"></div>
+  <button class="btn" id="btnExport" onclick="openExportModal()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">⬇ Export</button>
+  <button class="btn btn-primary" onclick="openAddModal()">+ Add Project</button>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="modal-overlay" id="exportModal" onclick="if(event.target===this)closeExportModal()">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <span class="modal-title">Export to Excel</span>
+      <button class="modal-close" onclick="closeExportModal()">✕</button>
+    </div>
+    <div style="padding:20px 24px 24px">
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Choose which projects to include. The export will always contain all sheets (Projects, BAST Billing, CM Meetings, PM Meetings, Summary).</p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button onclick="runExport('all')" class="btn btn-primary" style="width:100%;padding:10px;font-size:13px">📋 Export All Projects</button>
+        <button onclick="runExport('filtered')" class="btn" style="width:100%;padding:10px;font-size:13px;background:var(--surface2);color:var(--text);border:1px solid var(--border)">🔍 Export Filtered Only</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content" id="mainContent"></div>
+
+<!-- CUSTOM TERMIN MODAL -->
+<div class="modal-overlay" id="terminModal" onclick="if(event.target===this)closeTerminModal()">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <span class="modal-title" id="terminModalTitle">Add Custom Termin</span>
+      <button class="modal-close" onclick="closeTerminModal()">✕</button>
+    </div>
+    <div class="form-grid" style="padding:20px 24px 24px">
+      <div class="form-group full">
+        <label>Termin Name *</label>
+        <input type="text" id="termin_label" placeholder="e.g. Termin 1">
+      </div>
+      <div class="form-group">
+        <label>Start Date</label>
+        <input type="date" id="termin_start">
+      </div>
+      <div class="form-group">
+        <label>End Date</label>
+        <input type="date" id="termin_end">
+      </div>
+      <div class="form-group full" style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+        <button class="btn" onclick="closeTerminModal()" style="background:var(--cancel-bg);color:var(--cancel-text)">Cancel</button>
+        <button class="btn btn-primary" onclick="saveTermin()">Save Termin</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADD/EDIT MODAL -->
+<div class="modal-overlay" id="projectModal">
+  <div class="modal">
+    <h2 id="modalTitle">Add New Project</h2>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>PID *</label>
+        <input type="text" id="f_pid" placeholder="e.g. 24-64-005">
+      </div>
+      <div class="form-group">
+        <label>Company *</label>
+        <input type="text" id="f_company" placeholder="Client company name">
+      </div>
+      <div class="form-group full">
+        <label>Project / Description *</label>
+        <input type="text" id="f_name" placeholder="Project description">
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="f_status">
+          <option>On Track</option>
+          <option>In Progress - Minor Issues</option>
+          <option>In Progress - Major Issues</option>
+          <option>Completed</option>
+          <option>Not Started</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Contract Start Date</label>
+        <input type="date" id="f_contractStart">
+      </div>
+      <div class="form-group">
+        <label>Contract End Date</label>
+        <input type="date" id="f_deadline">
+      </div>
+      <div class="form-group full">
+        <label>Billing Frequency</label>
+        <select id="f_billingFreq">
+          <option value="">— Select frequency —</option>
+          <option value="once">One-time payment</option>
+          <option value="1">Once a year (every 12 months)</option>
+          <option value="2">Twice a year (every 6 months)</option>
+          <option value="3">3 times a year (every 4 months)</option>
+          <option value="4">4 times a year (every 3 months)</option>
+          <option value="6">6 times a year (every 2 months)</option>
+          <option value="12">Monthly (every 1 month)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Project Admin</label>
+        <input type="text" id="f_pa" placeholder="e.g. Andi Pratama">
+      </div>
+      <div class="form-group">
+        <label>Project Manager</label>
+        <input type="text" id="f_pm" placeholder="e.g. Budi Santoso">
+      </div>
+      <div class="form-group">
+        <label>Operation Manager</label>
+        <input type="text" id="f_om" placeholder="e.g. Rina Wijaya">
+      </div>
+      <div class="form-group">
+        <label>Handover Status</label>
+        <select id="f_handoverStatus">
+          <option>Not Started</option>
+          <option>Transfer Knowledge</option>
+          <option>Completed</option>
+        </select>
+      </div>
+      <div class="form-group full">
+        <label>Issues / Notes</label>
+        <textarea id="f_issues" placeholder="One issue per line"></textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveProject()">Save Project</button>
+    </div>
+  </div>
+</div>
+
+<!-- ISSUE MODAL -->
+<div class="modal-overlay" id="issueModal">
+  <div class="modal">
+    <h2 id="issueModalTitle">Issues</h2>
+    <div id="issueModalBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeIssueModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOGIN SCREEN -->
+<div id="loginScreen" style="position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000">
+  <!-- Flow field canvas background -->
+  <canvas id="loginCanvas" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
+
+  <!-- Login card -->
+  <div style="position:relative;z-index:1;background:rgba(255,255,255,0.07);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:42px 38px;width:380px;max-width:95vw;box-shadow:0 32px 80px rgba(0,0,0,0.6)">
+    <div style="text-align:center;margin-bottom:30px">
+      <div style="font-size:40px;margin-bottom:10px">📋</div>
+      <h1 style="font-size:22px;font-weight:700;color:#fff;margin-bottom:4px;letter-spacing:-0.3px">Project Tracker</h1>
+      <p style="font-size:12px;color:rgba(255,255,255,0.5)">Sign in to your account</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px">Username</label>
+        <input id="login_user" type="text" placeholder="Enter username" autocomplete="username"
+          style="width:100%;padding:10px 13px;border:1.5px solid rgba(255,255,255,0.2);border-radius:9px;font-size:13px;font-family:inherit;outline:none;transition:border .2s,background .2s;background:rgba(255,255,255,0.08);color:#fff;box-sizing:border-box"
+          onfocus="this.style.borderColor='#818cf8';this.style.background='rgba(255,255,255,0.13)'" onblur="this.style.borderColor='rgba(255,255,255,0.2)';this.style.background='rgba(255,255,255,0.08)'"
+          onkeydown="if(event.key==='Enter')document.getElementById('login_pass').focus()">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px">Password</label>
+        <input id="login_pass" type="password" placeholder="Enter password" autocomplete="current-password"
+          style="width:100%;padding:10px 13px;border:1.5px solid rgba(255,255,255,0.2);border-radius:9px;font-size:13px;font-family:inherit;outline:none;transition:border .2s,background .2s;background:rgba(255,255,255,0.08);color:#fff;box-sizing:border-box"
+          onfocus="this.style.borderColor='#818cf8';this.style.background='rgba(255,255,255,0.13)'" onblur="this.style.borderColor='rgba(255,255,255,0.2)';this.style.background='rgba(255,255,255,0.08)'"
+          onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <div id="login_error" style="color:#fca5a5;font-size:12px;background:rgba(220,38,38,0.2);border:1px solid rgba(220,38,38,0.3);padding:8px 10px;border-radius:7px;display:none"></div>
+      <button onclick="doLogin()"
+        style="background:linear-gradient(135deg,#6366f1,#818cf8);color:white;border:none;border-radius:9px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;margin-top:4px;transition:opacity .15s,transform .1s;letter-spacing:0.3px"
+        onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'"
+        onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform='scale(1)'">Sign In</button>
+    </div>
+    <p style="text-align:center;font-size:10px;color:rgba(255,255,255,0.25);margin-top:22px">Default: admin / admin123</p>
+  </div>
+</div>
+
+<!-- USER MANAGEMENT MODAL -->
+<div class="modal-overlay" id="userMgmtModal">
+  <div class="modal" style="width:500px">
+    <h2>👥 User Management</h2>
+    <div id="userListBody" style="margin-bottom:16px"></div>
+    <hr style="border:none;border-top:1px solid #e8eaf0;margin:16px 0">
+    <h3 style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px">Add New User</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Username *</label>
+        <input type="text" id="nu_username" placeholder="Username">
+      </div>
+      <div class="form-group">
+        <label>Email *</label>
+        <input type="email" id="nu_email" placeholder="Email address">
+      </div>
+      <div class="form-group">
+        <label>Role</label>
+        <select id="nu_role">
+          <option value="pm">PM</option>
+          <option value="om">OM</option>
+          <option value="system_engineer">System Engineer</option>
+          <option value="dba">DBA</option>
+          <option value="technical_writer">Technical Writer</option>
+          <option value="admin">Admin (Superuser)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Password *</label>
+        <input type="password" id="nu_password" placeholder="Password">
+      </div>
+      <div class="form-group">
+        <label>Confirm Password *</label>
+        <input type="password" id="nu_password2" placeholder="Confirm password">
+      </div>
+    </div>
+    <div id="nu_error" style="color:#dc2626;font-size:12px;margin-top:8px;display:none"></div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="document.getElementById('userMgmtModal').classList.remove('show')">Close</button>
+      <button class="btn btn-primary" onclick="addUser()">Add User</button>
+    </div>
+  </div>
+</div>
+
+<!-- PM REQUEST MODAL -->
+<div class="modal-overlay" id="pmReqModal">
+  <div class="modal">
+    <h2 id="pmModalTitle">Add PM Request</h2>
+    <div class="form-grid">
+      <div class="form-group full">
+        <label>Project *</label>
+        <select id="pm_projectId" style="font-size:12px"></select>
+      </div>
+      <div class="form-group">
+        <label>From Date *</label>
+        <input type="date" id="pm_startDate">
+      </div>
+      <div class="form-group">
+        <label>From Time</label>
+        <input type="time" id="pm_startTime">
+      </div>
+      <div class="form-group">
+        <label>To Date</label>
+        <input type="date" id="pm_endDate">
+      </div>
+      <div class="form-group">
+        <label>To Time</label>
+        <input type="time" id="pm_endTime">
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="pm_status">
+          <option>Open</option>
+          <option>In Progress</option>
+          <option>Resolved</option>
+        </select>
+      </div>
+      <div class="form-group full">
+        <label>Issue Description *</label>
+        <input type="text" id="pm_title" placeholder="Brief description of the preventive maintenance request">
+      </div>
+      <div class="form-group">
+        <label>Resolved Date</label>
+        <input type="date" id="pm_resolvedDate">
+      </div>
+      <div class="form-group">
+        <label>PIC Utama</label>
+        <input type="text" id="pm_picUtama" placeholder="e.g. Budi Santoso">
+      </div>
+      <div class="form-group">
+        <label>PIC Support</label>
+        <input type="text" id="pm_picSupport" placeholder="e.g. Rina Wijaya">
+      </div>
+      <div class="form-group full">
+        <label>Notes</label>
+        <textarea id="pm_notes" placeholder="Additional notes, scheduled maintenance details, action taken..."></textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closePmModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="savePmRequest()">Save PM Request</button>
+    </div>
+  </div>
+</div>
+
+<!-- CM REQUEST MODAL -->
+<div class="modal-overlay" id="cmModal">
+  <div class="modal">
+    <h2 id="cmModalTitle">Add CM Request</h2>
+    <div class="form-grid">
+      <div class="form-group full">
+        <label>Project *</label>
+        <select id="cm_projectId" style="font-size:12px"></select>
+      </div>
+      <div class="form-group">
+        <label>From Date *</label>
+        <input type="date" id="cm_startDate">
+      </div>
+      <div class="form-group">
+        <label>From Time</label>
+        <input type="time" id="cm_startTime">
+      </div>
+      <div class="form-group">
+        <label>To Date</label>
+        <input type="date" id="cm_endDate">
+      </div>
+      <div class="form-group">
+        <label>To Time</label>
+        <input type="time" id="cm_endTime">
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="cm_status">
+          <option>Open</option>
+          <option>In Progress</option>
+          <option>Resolved</option>
+        </select>
+      </div>
+      <div class="form-group full">
+        <label>Issue Description *</label>
+        <input type="text" id="cm_title" placeholder="Brief description of the corrective maintenance request">
+      </div>
+      <div class="form-group">
+        <label>Resolved Date</label>
+        <input type="date" id="cm_resolvedDate">
+      </div>
+      <div class="form-group">
+        <label>PIC Utama</label>
+        <input type="text" id="cm_picUtama" placeholder="e.g. Budi Santoso">
+      </div>
+      <div class="form-group">
+        <label>PIC Support</label>
+        <input type="text" id="cm_picSupport" placeholder="e.g. Rina Wijaya">
+      </div>
+      <div class="form-group full">
+        <label>Notes</label>
+        <textarea id="cm_notes" placeholder="Additional notes, root cause, action taken..."></textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeCmModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCmRequest()">Save CM Request</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── SUPABASE ──
+const SUPABASE_URL = 'https://dvehuzztrmllqbeiylzo.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_hxIlGaGqbshQbI_V0JiOww_6CHo7w0I';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── AUTH ──
+const DEFAULT_USERS = [{ id:1, username:'admin', password:btoa('admin123'), role:'admin' }];
+let authUsers = [];
+
+let currentUser = JSON.parse(sessionStorage.getItem('pm_session') || 'null');
+
+function doLogin() {
+  const username = document.getElementById('login_user').value.trim();
+  const password = document.getElementById('login_pass').value;
+  const errEl = document.getElementById('login_error');
+  const user = authUsers.find(u => u.username === username && u.password === btoa(password));
+  if (!user) {
+    errEl.textContent = 'Invalid username or password.';
+    errEl.style.display = 'block';
+    document.getElementById('login_pass').value = '';
+    return;
+  }
+  errEl.style.display = 'none';
+  currentUser = { id: user.id, username: user.username, role: user.role };
+  sessionStorage.setItem('pm_session', JSON.stringify(currentUser));
+  document.getElementById('loginScreen').style.display = 'none';
+  applyAuthUI();
+  renderCurrentTab();
+}
+
+function doLogout() {
+  sessionStorage.removeItem('pm_session');
+  currentUser = null;
+  document.getElementById('login_user').value = '';
+  document.getElementById('login_pass').value = '';
+  document.getElementById('login_error').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+
+function applyAuthUI() {
+  if (!currentUser) return;
+  document.getElementById('userLabel').textContent = `👤 ${currentUser.username} (${roleLabel(currentUser.role)})`;
+  document.getElementById('btnManageUsers').style.display = currentUser.role==='admin' ? 'block' : 'none';
+  document.getElementById('tabAccessControl').style.display = currentUser.role==='admin' ? 'block' : 'none';
+  document.getElementById('btnTheme').textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+  // Show/hide Add Project button based on permission
+  const addBtn = document.querySelector('.toolbar .btn-primary');
+  if (addBtn) addBtn.style.display = can('add_project') ? '' : 'none';
+}
+
+// ── PERMISSION ENGINE ──
+const ALL_PERMISSIONS = [
+  { key:'view_projects',    label:'View Projects',           desc:'See the Project Overview tab' },
+  { key:'add_project',      label:'Add Project',             desc:'Create new projects' },
+  { key:'edit_project',     label:'Edit Project',            desc:'Modify existing project details' },
+  { key:'delete_project',   label:'Delete Project',          desc:'Remove projects permanently' },
+  { key:'view_reminders',   label:'View Reminders',          desc:'See the Reminders tab' },
+  { key:'view_bast',        label:'View BAST Billing',       desc:'See BAST Billing tab' },
+  { key:'edit_bast',        label:'Edit BAST',               desc:'Update BAST steps and status' },
+  { key:'view_cm',          label:'View CM Meetings',        desc:'See CM Meetings tab' },
+  { key:'manage_cm',        label:'Manage CM Requests',      desc:'Add, edit, delete CM requests' },
+  { key:'view_pm',          label:'View PM Meetings',        desc:'See PM Meetings tab' },
+  { key:'manage_pm',        label:'Manage PM Requests',      desc:'Add, edit, delete PM requests' },
+];
+
+// ── ROLES ──
+const ROLES = [
+  { key:'admin',            label:'Admin',            badge:'blue'   },
+  { key:'pm',               label:'PM',               badge:'purple' },
+  { key:'om',               label:'OM',               badge:'amber'  },
+  { key:'system_engineer',  label:'System Engineer',  badge:'green'  },
+  { key:'dba',              label:'DBA',               badge:'orange' },
+  { key:'technical_writer', label:'Technical Writer',  badge:'gray'   },
+];
+
+function roleLabel(key) { return (ROLES.find(r=>r.key===key)||{label:key}).label; }
+function roleBadge(key) { return (ROLES.find(r=>r.key===key)||{badge:'gray'}).badge; }
+
+const DEFAULT_ROLE_PERMISSIONS = {
+  pm:               { view_projects:true,  add_project:true,  edit_project:true,  delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true  },
+  om:               { view_projects:true,  add_project:true,  edit_project:true,  delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true  },
+  system_engineer:  { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:true,  view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true  },
+  dba:              { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:true,  view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true  },
+  technical_writer: { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:false, view_pm:true,  manage_pm:false },
+};
+
+let rolePermissions = {};
+
+async function saveRolePermissions() {
+  const { error } = await db.from('config').upsert({ key:'role_permissions', value:rolePermissions });
+  return !error;
+}
+
+// Admin always has all permissions; others use role-level permissions
+function can(permKey) {
+  if (!currentUser) return false;
+  if (currentUser.role === 'admin') return true;
+  const rp = rolePermissions[currentUser.role] || DEFAULT_ROLE_PERMISSIONS[currentUser.role] || {};
+  return rp[permKey] || false;
+}
+
+function openUserMgmt() {
+  renderUserList();
+  document.getElementById('nu_username').value = '';
+  document.getElementById('nu_email').value = '';
+  document.getElementById('nu_password').value = '';
+  document.getElementById('nu_password2').value = '';
+  document.getElementById('nu_role').value = 'pm';
+  document.getElementById('nu_error').style.display = 'none';
+  document.getElementById('userMgmtModal').classList.add('show');
+}
+
+function renderUserList() {
+  const rows = authUsers.map(u => `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#f8f9fc;border-radius:8px;border:1px solid #e8eaf0;margin-bottom:6px">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-weight:600;font-size:13px">${u.username}</span>
+          <span class="badge badge-${roleBadge(u.role)}">${roleLabel(u.role)}</span>
+          ${currentUser&&u.id===currentUser.id?'<span style="font-size:10px;color:#16a34a">(you)</span>':''}
+        </div>
+        ${u.email?`<div style="font-size:11px;color:#6b7280;margin-top:2px">${u.email}</div>`:''}
+      </div>
+      ${currentUser&&u.id!==currentUser.id?`<button class="btn-sm btn-delete" onclick="deleteUser(${u.id})">Remove</button>`:''}
+    </div>`).join('');
+  document.getElementById('userListBody').innerHTML = rows || '<p style="color:#9ca3af;font-size:13px">No users.</p>';
+}
+
+async function addUser() {
+  const username = document.getElementById('nu_username').value.trim();
+  const email = document.getElementById('nu_email').value.trim();
+  const password = document.getElementById('nu_password').value;
+  const password2 = document.getElementById('nu_password2').value;
+  const role = document.getElementById('nu_role').value;
+  const errEl = document.getElementById('nu_error');
+  if (!username || !password) { errEl.textContent='Username and password are required.'; errEl.style.display='block'; return; }
+  if (!email) { errEl.textContent='Email is required.'; errEl.style.display='block'; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent='Please enter a valid email address.'; errEl.style.display='block'; return; }
+  if (password !== password2) { errEl.textContent='Passwords do not match.'; errEl.style.display='block'; return; }
+  if (authUsers.find(u=>u.username===username)) { errEl.textContent='Username already exists.'; errEl.style.display='block'; return; }
+  if (authUsers.find(u=>u.email===email)) { errEl.textContent='Email already in use.'; errEl.style.display='block'; return; }
+  errEl.style.display = 'none';
+  const btn = document.querySelector('#userMgmtModal .btn-primary');
+  if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
+  authUsers.push({ id: Date.now(), username, email, password: btoa(password), role, permissions: undefined });
+  const ok = await saveAuthUsers();
+  if (btn) { btn.textContent = 'Add User'; btn.disabled = false; }
+  if (!ok) { errEl.textContent = 'Failed to save. Check your connection and try again.'; errEl.style.display='block'; authUsers.pop(); return; }
+  document.getElementById('nu_username').value='';
+  document.getElementById('nu_email').value='';
+  document.getElementById('nu_password').value='';
+  document.getElementById('nu_password2').value='';
+  renderUserList();
+}
+
+async function deleteUser(id) {
+  if (!confirm('Remove this user?')) return;
+  authUsers = authUsers.filter(u=>u.id!==id);
+  await saveAuthUsers();
+  renderUserList();
+}
+
+// ── DATA VERSION (bump this to force-reset localStorage) ──
+const DATA_VERSION = 'v9-pm-requests';
+
+const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+
+// ── REAL PROJECT DATA ──
+const SEED_PROJECTS = [
+  { id:1,  pid:'24-64-005', company:'PT Mitra Transaksi Indonesia',       name:'Pengadaan Middleware dan Database Monitoring & Maintenance Managed Service', status:'Completed',                  contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Completed', bastSteps:[true,true,true,true,true,true,true,true], cmRequests:[], pmRequests:[], issues:'' },
+  { id:2,  pid:'22-64-110', company:'PT Pertamina Bina Medika IHC',       name:'Sewa Pakai SD-WAN di PT Pertamina Bina Medika IHC',                          status:'Completed',                  contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Completed', bastSteps:[true,true,true,true,true,true,true,true], cmRequests:[], pmRequests:[], issues:'' },
+  { id:3,  pid:'25-64-075', company:'PT Pertamina Bina Medika IHC',       name:'Pertamedika Firewall BIH, DC, DRC',                                           status:'Completed',                  contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Completed', bastSteps:[true,true,true,true,true,true,true,true], cmRequests:[], pmRequests:[], issues:'' },
+  { id:4,  pid:'24-64-065', company:'Pertamedika Bali',                   name:'Pengadaan Sewa Pakai Server Operasional Bali International Hospital',         status:'Completed',                  contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Completed', bastSteps:[true,true,true,true,true,true,true,true], cmRequests:[], pmRequests:[], issues:'' },
+  { id:5,  pid:'25-63-073', company:'Permata Bank',                       name:'Pengadaan EM Oracle Tools Monitoring',                                        status:'Completed',                  contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Completed', bastSteps:[true,true,true,true,true,true,true,true], cmRequests:[], pmRequests:[], issues:'' },
+  { id:6,  pid:'23-62-012', company:'PT. Kereta Api Indonesia (Persero)', name:'Oracle Exadata Cloud At Customer',                                            status:'On Track',                   contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Not Started', bastSteps:[false,false,false,false,false,false,false,false], cmRequests:[], pmRequests:[], issues:'' },
+  { id:7,  pid:'26-62-099', company:'PT. Kereta Api Indonesia (Persero)', name:'Pengadaan Infrastruktur Oracle ExaCC utk Implementasi HA DB Ticketing',      status:'In Progress - Minor Issues', contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Transfer Knowledge', bastSteps:[false,false,false,false,false,false,false,false], cmRequests:[], pmRequests:[], issues:'Sedang dalam fase Transfer Knowledge' },
+  { id:8,  pid:'25-62-086', company:'PT. Kereta Api Indonesia (Persero)', name:'Renewal Annual Technical Support MySQL Enterprise Edition / Renewal Subscription Oracle MySQL PT KAI Oktober 2025-2026', status:'On Track', contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Not Started', bastSteps:[false,false,false,false,false,false,false,false], cmRequests:[], pmRequests:[], issues:'' },
+  { id:9,  pid:'25-64-062', company:'BPJS Ketenagakerjaan',               name:'Renewal Lisensi DB',                                                          status:'On Track',                   contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Not Started', bastSteps:[false,false,false,false,false,false,false,false], cmRequests:[], pmRequests:[], issues:'' },
+  { id:10, pid:'25-64-082', company:'BPJS Ketenagakerjaan',               name:'ATS Media Backup (PM, CM) Commvault',                                         status:'Completed',                  contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Completed', bastSteps:[true,true,true,true,true,true,true,true], cmRequests:[], pmRequests:[], issues:'' },
+  { id:11, pid:'25-64-051', company:'BPJS Ketenagakerjaan',               name:'Penyediaan Media Backup',                                                     status:'On Track',                   contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Not Started', bastSteps:[false,false,false,false,false,false,false,false], cmRequests:[], pmRequests:[], issues:'' },
+  { id:12, pid:'26-62-002', company:'Prosia - Bea Cukai',                 name:'Renewal ATS Oracle',                                                          status:'Completed',                  contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Completed', bastSteps:[true,true,true,true,true,true,true,true], cmRequests:[], pmRequests:[], issues:'' },
+  { id:13, pid:'25-62-061', company:'Perumda PAM JAYA',                   name:'Renewal ATS Oracle PAM Jaya',                                                 status:'On Track',                   contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Not Started', bastSteps:[false,false,false,false,false,false,false,false], cmRequests:[], pmRequests:[], issues:'' },
+  { id:14, pid:'25-62-047', company:'Perumda PAM JAYA',                   name:'OCS (Oracle Consulting Services)',                                             status:'Completed',                  contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Completed', bastSteps:[true,true,true,true,true,true,true,true], cmRequests:[], pmRequests:[], issues:'' },
+  { id:15, pid:'25-62-040', company:'Perumda PAM JAYA',                   name:'Pengadaan Billing System Perumda PAM JAYA',                                   status:'Not Started',                contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Not Started', bastSteps:[false,false,false,false,false,false,false,false], cmRequests:[], pmRequests:[], issues:'' },
+  { id:16, pid:'26-62-015', company:'Petronas (PC Ketapang II Ltd)',       name:'Provision of FortiGate Maintenance and Support Services',                     status:'Completed',                  contractStart:'', billingFreq:'', deadline:'2026-12-31', bastDate:'', bastStatus:'Not Started', handoverStatus:'Completed', bastSteps:[true,true,true,true,true,true,true,true], cmRequests:[], pmRequests:[], issues:'' },
+];
+
+
+const BAST_STEPS = [
+  'Pembuatan Report Operation',
+  'Pembuatan Dokumen BAST',
+  'TTD General Manager (Dwi Budiyanto)',
+  'TTD Direktur (Meri Gajali)',
+  'Submit Hardcopy Document ke Customer',
+  'TTD Customer',
+  'Dokumen Kembali ke Kita',
+  'Send Invoice',
+];
+
+
+const BILLING_FREQ_LABELS = {
+  'once': 'One-time payment',
+  '1':    'Once a year (every 12 months)',
+  '2':    'Twice a year (every 6 months)',
+  '3':    '3 times a year (every 4 months)',
+  '4':    '4 times a year (every 3 months)',
+  '6':    '6 times a year (every 2 months)',
+  '12':   'Monthly (every 1 month)',
+};
+
+const MONTHS_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+
+function generatePeriods(startStr, endStr, freq) {
+  if (!startStr || !endStr || !freq) return [];
+  if (freq === 'once') {
+    return [{ label: 'One-time Payment', start: startStr, end: endStr }];
+  }
+  const freqNum = parseInt(freq);
+  const monthsPerPeriod = 12 / freqNum;
+  const start = new Date(startStr + 'T00:00:00');
+  const end   = new Date(endStr   + 'T00:00:00');
+  const periods = [];
+  let cur = new Date(start);
+  while (cur <= end) {
+    const pStart = new Date(cur);
+    const pEnd   = new Date(cur);
+    pEnd.setMonth(pEnd.getMonth() + monthsPerPeriod);
+    pEnd.setDate(pEnd.getDate() - 1);
+    const actualEnd = pEnd > end ? end : pEnd;
+    let label;
+    if (monthsPerPeriod === 12) {
+      label = pStart.getFullYear().toString();
+    } else if (monthsPerPeriod === 1) {
+      label = MONTHS_ID[pStart.getMonth()] + ' ' + pStart.getFullYear();
+    } else {
+      label = MONTHS_ID[pStart.getMonth()] + ' – ' + MONTHS_ID[actualEnd.getMonth()] + ' ' + actualEnd.getFullYear();
+    }
+    periods.push({ label, start: pStart.toISOString().slice(0,10), end: actualEnd.toISOString().slice(0,10) });
+    cur.setMonth(cur.getMonth() + monthsPerPeriod);
+  }
+  return periods;
+}
+
+function getBastPeriods(p) {
+  // Merge auto-generated schedule with stored step progress
+  const generated = generatePeriods(p.contractStart, p.deadline, p.billingFreq);
+  const stored = p.bastPeriods || [];
+  const autoPeriods = generated.map(g => {
+    const existing = stored.find(s => s.label === g.label);
+    return { ...g, steps: existing ? existing.steps : [false,false,false,false,false,false,false,false], submitDeadline: existing ? (existing.submitDeadline||'') : '', isCustom: false };
+  });
+  // Append custom termins
+  const customPeriods = (p.customTermins || []).map(t => ({ ...t, isCustom: true }));
+  return [...autoPeriods, ...customPeriods];
+}
+
+function saveBastPeriods(projectId, periods) {
+  const p = projects.find(x => x.id === projectId);
+  if (!p) return;
+  // Split auto vs custom
+  p.bastPeriods    = periods.filter(per => !per.isCustom).map(({ label, start, end, steps, submitDeadline }) => ({ label, start, end, steps, submitDeadline: submitDeadline||'' }));
+  p.customTermins  = periods.filter(per =>  per.isCustom).map(({ label, start, end, steps, submitDeadline }) => ({ label, start, end, steps: steps||[false,false,false,false,false,false,false,false], submitDeadline: submitDeadline||'' }));
+  save();
+}
+
+function bastStepsFromCount(steps) {
+  const done = steps.filter(Boolean).length;
+  if (done === 0) return 'Not Started';
+  if (done === 8) return 'Completed';
+  if (done >= 5) return 'Submitted';
+  return 'In Progress';
+}
+
+function bastProgressHtml(p) {
+  const per = currentBastPeriod(p);
+  if (!per) return '<span style="font-size:11px;color:#9ca3af">—</span>';
+  const done = per.steps.filter(Boolean).length;
+  const pct = Math.round((done/8)*100);
+  const color = done===8?'#16a34a':done>=5?'#7c3aed':done>0?'#f59e0b':'#d1d5db';
+  return `<div style="display:flex;align-items:center;gap:6px;min-width:80px">
+    <div style="flex:1;height:5px;background:#e5e7eb;border-radius:3px;overflow:hidden">
+      <div style="width:${pct}%;height:100%;background:${color};border-radius:3px;transition:width .3s"></div>
+    </div>
+    <span style="font-size:10px;font-weight:700;color:${color};white-space:nowrap">${done}/8</span>
+  </div>`;
+}
+
+let projects = [];
+
+let editingId = null;
+let currentTab = 'projects';
+
+async function save() {
+  const { error } = await db.from('config').upsert({ key:'projects', value:projects }, { onConflict:'key' });
+  if (error) console.error('Save failed:', error.message);
+}
+
+async function saveAuthUsers() {
+  const { error } = await db.from('config').upsert({ key:'auth_users', value:authUsers }, { onConflict:'key' });
+  if (error) console.error('saveAuthUsers failed:', error.message);
+  return !error;
+}
+
+function daysDiff(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr + 'T00:00:00'); d.setHours(0,0,0,0);
+  return Math.ceil((d - TODAY) / 86400000);
+}
+
+function workdaysUntil(dateStr) {
+  if (!dateStr) return null;
+  const end = new Date(dateStr + 'T00:00:00'); end.setHours(0,0,0,0);
+  if (end < TODAY) return null;
+  let count = 0, cur = new Date(TODAY);
+  while (cur <= end) {
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+function currentBastPeriod(p) {
+  const periods = getBastPeriods(p);
+  if (!periods.length) return null;
+  // First incomplete period = the one that needs action
+  const active = periods.find(per => !per.steps.every(Boolean));
+  // If all done, return last
+  return active || periods[periods.length - 1];
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr + 'T00:00:00');
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
+}
+
+function fmtRaw(dateStr) {
+  if (!dateStr) return '—';
+  const [y,m,d] = dateStr.split('-');
+  return `${d}-${m}-${y}`;
+}
+function dateClass(dateStr) {
+  const d = daysDiff(dateStr);
+  if (d === null) return '';
+  if (d < 0) return 'overdue';
+  if (d <= 14) return 'soon';
+  return 'ok';
+}
+
+function statusBadge(s) {
+  const m = {
+    'On Track':                  'green',
+    'In Progress - Minor Issues':'amber',
+    'In Progress - Major Issues':'red',
+    'Completed':                 'blue',
+    'Not Started':               'gray',
+  };
+  return `<span class="badge badge-${m[s]||'gray'}">${s}</span>`;
+}
+function handoverBadge(s) {
+  const m = { 'Not Started':'gray', 'Transfer Knowledge':'amber', 'Completed':'blue' };
+  return `<span class="badge badge-${m[s]||'gray'}">${s||'—'}</span>`;
+}
+function bastBadge(s) {
+  const m = { 'Not Started':'gray','In Progress':'yellow','Transfer Knowledge':'orange','Submitted':'purple','Completed':'green' };
+  return `<span class="badge badge-${m[s]||'gray'}">${s||'—'}</span>`;
+}
+function cmBadge(s) {
+  const m = { 'None Planned':'gray','Scheduled':'blue','Completed':'green' };
+  return `<span class="badge badge-${m[s]||'gray'}">${s||'—'}</span>`;
+}
+function pmBadge(s) {
+  const m = { 'None Planned':'gray','Scheduled':'purple','Completed':'green' };
+  return `<span class="badge badge-${m[s]||'gray'}">${s||'—'}</span>`;
+}
+
+function getFiltered() {
+  const q  = (document.getElementById('searchBox')?.value||'').toLowerCase();
+  const fs = document.getElementById('filterStatus')?.value||'';
+  const fc = document.getElementById('filterCompany')?.value||'';
+  const fa  = document.getElementById('filterAdmin')?.value||'';
+  const fpm = document.getElementById('filterPM')?.value||'';
+  const fom = document.getElementById('filterOM')?.value||'';
+  return projects.filter(p =>
+    (!q   || p.pid.toLowerCase().includes(q) || p.company.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)) &&
+    (!fs  || p.status === fs) &&
+    (!fc  || p.company === fc) &&
+    (!fa  || p.projectAdmin === fa) &&
+    (!fpm || p.projectManager === fpm) &&
+    (!fom || p.operationManager === fom)
+  );
+}
+
+function populateCompanyFilter() {
+  const sel = document.getElementById('filterCompany');
+  const cur = sel.value;
+  const cos = [...new Set(projects.map(p => p.company))].sort();
+  sel.innerHTML = '<option value="">All Companies</option>';
+  cos.forEach(c => { const o = document.createElement('option'); o.value=c; o.textContent=c; if(c===cur) o.selected=true; sel.appendChild(o); });
+
+  const asel = document.getElementById('filterAdmin');
+  const acur = asel.value;
+  const admins = [...new Set(projects.map(p => p.projectAdmin).filter(Boolean))].sort();
+  asel.innerHTML = '<option value="">All Project Admins</option>';
+  admins.forEach(a => { const o = document.createElement('option'); o.value=a; o.textContent=a; if(a===acur) o.selected=true; asel.appendChild(o); });
+
+  const pmsel = document.getElementById('filterPM');
+  const pmcur = pmsel.value;
+  const pms = [...new Set(projects.map(p => p.projectManager).filter(Boolean))].sort();
+  pmsel.innerHTML = '<option value="">All Project Managers</option>';
+  pms.forEach(v => { const o = document.createElement('option'); o.value=v; o.textContent=v; if(v===pmcur) o.selected=true; pmsel.appendChild(o); });
+
+  const omsel = document.getElementById('filterOM');
+  const omcur = omsel.value;
+  const oms = [...new Set(projects.map(p => p.operationManager).filter(Boolean))].sort();
+  omsel.innerHTML = '<option value="">All Operation Managers</option>';
+  oms.forEach(v => { const o = document.createElement('option'); o.value=v; o.textContent=v; if(v===omcur) o.selected=true; omsel.appendChild(o); });
+}
+
+function renderSummary() {
+  const total      = projects.length;
+  const onTrack    = projects.filter(p => p.status==='On Track').length;
+  const minorIssue = projects.filter(p => p.status==='In Progress - Minor Issues').length;
+  const majorIssue = projects.filter(p => p.status==='In Progress - Major Issues').length;
+  const completed  = projects.filter(p => p.status==='Completed').length;
+  const notStarted = projects.filter(p => p.status==='Not Started').length;
+  const companies  = new Set(projects.map(p => p.company)).size;
+
+  document.getElementById('headerSub').textContent = `${total} PIDs · ${companies} Companies`;
+  document.getElementById('summaryBar').innerHTML = `
+    <div class="stat-card"         onclick="showStatPopup('all')"><div class="val">${total}</div><div class="lbl">Total PIDs</div></div>
+    <div class="stat-card green"   onclick="showStatPopup('On Track')"><div class="val">${onTrack}</div><div class="lbl">On Track</div></div>
+    <div class="stat-card amber"   onclick="showStatPopup('In Progress - Minor Issues')"><div class="val">${minorIssue}</div><div class="lbl">Minor Issues</div></div>
+    <div class="stat-card red"     onclick="showStatPopup('In Progress - Major Issues')"><div class="val">${majorIssue}</div><div class="lbl">Major Issues</div></div>
+    <div class="stat-card blue"    onclick="showStatPopup('Completed')"><div class="val">${completed}</div><div class="lbl">Completed</div></div>
+    <div class="stat-card gray"    onclick="showStatPopup('Not Started')"><div class="val">${notStarted}</div><div class="lbl">Not Started</div></div>`;
+}
+
+function showStatPopup(filter) {
+  const labels = {
+    'all': 'All Projects',
+    'On Track': '✅ On Track',
+    'In Progress - Minor Issues': '⚠️ Minor Issues',
+    'In Progress - Major Issues': '🔴 Major Issues',
+    'Completed': '🔵 Completed',
+    'Not Started': '⬜ Not Started'
+  };
+  const filtered = filter === 'all' ? projects : projects.filter(p => p.status === filter);
+  const title = labels[filter] || filter;
+
+  const rows = filtered.length ? filtered.map(p => `
+    <tr style="border-bottom:1px solid #f0f0f0">
+      <td style="padding:8px 10px;font-weight:600;color:#444;white-space:nowrap">${p.pid}</td>
+      <td style="padding:8px 10px;color:#666;font-size:13px">${p.company}</td>
+      <td style="padding:8px 10px;font-size:13px">${p.name}</td>
+      <td style="padding:8px 10px">${statusBadge(p.status)}</td>
+    </tr>`).join('') : `<tr><td colspan="4" style="padding:20px;text-align:center;color:#aaa">No projects in this category</td></tr>`;
+
+  const popup = document.createElement('div');
+  popup.id = 'statPopupOverlay';
+  popup.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center';
+  popup.innerHTML = `
+    <div style="background:#fff;border-radius:12px;width:680px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,0.2)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid #eee">
+        <div>
+          <div style="font-size:16px;font-weight:700;color:#1a1a2e">${title}</div>
+          <div style="font-size:12px;color:#888;margin-top:2px">${filtered.length} project${filtered.length!==1?'s':''}</div>
+        </div>
+        <button onclick="document.getElementById('statPopupOverlay').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;padding:4px 8px;border-radius:6px;line-height:1">✕</button>
+      </div>
+      <div style="overflow-y:auto;flex:1">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:#f8f9fa">
+              <th style="padding:9px 10px;text-align:left;font-size:11px;color:#888;font-weight:600;text-transform:uppercase">PID</th>
+              <th style="padding:9px 10px;text-align:left;font-size:11px;color:#888;font-weight:600;text-transform:uppercase">Company</th>
+              <th style="padding:9px 10px;text-align:left;font-size:11px;color:#888;font-weight:600;text-transform:uppercase">Project Name</th>
+              <th style="padding:9px 10px;text-align:left;font-size:11px;color:#888;font-weight:600;text-transform:uppercase">Status</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  popup.addEventListener('click', e => { if (e.target === popup) popup.remove(); });
+  document.body.appendChild(popup);
+}
+
+function renderProjects() {
+  const data = getFiltered();
+  if (!data.length) { document.getElementById('mainContent').innerHTML='<div class="empty-state"><div class="icon">📭</div><div>No projects found</div></div>'; return; }
+  const rows = data.map((p,i) => {
+    const issLines = p.issues ? p.issues.trim().split('\n').filter(Boolean) : [];
+    const issHtml  = issLines.length
+      ? `<span class="issue-count has" onclick="showIssues(${p.id})" title="View issues">${issLines.length}</span>`
+      : `<span class="issue-count none">0</span>`;
+    return `<tr id="project-row-${p.id}">
+      <td style="font-size:11px;color:#888;text-align:center">${i+1}</td>
+      <td><div class="pid">${p.pid}</div><div class="company">${p.company}</div></td>
+      <td><div class="projname">${p.name}</div></td>
+      <td>${statusBadge(p.status)}</td>
+      <td><div style="font-size:12px;color:#374151;font-weight:500">${p.projectAdmin||'<span style="color:#d1d5db">—</span>'}</div></td>
+      <td><div style="font-size:12px;color:#374151;font-weight:500">${p.projectManager||'<span style="color:#d1d5db">—</span>'}</div></td>
+      <td><div style="font-size:12px;color:#374151;font-weight:500">${p.operationManager||'<span style="color:#d1d5db">—</span>'}</div></td>
+      <td><span class="date-cell">${formatDate(p.contractStart)}</span></td>
+      <td><span class="date-cell ${dateClass(p.deadline)}">${formatDate(p.deadline)}</span></td>
+      <td>${(() => {
+        const wd = workdaysUntil(p.deadline);
+        if (p.status==='Completed') return '<span class="badge badge-blue">Completed</span>';
+        if (wd===null) return '<span style="color:#dc2626;font-weight:700;font-size:12px">Expired</span>';
+        const color = wd<=30?'#dc2626':wd<=90?'#d97706':'#16a34a';
+        return '<span style="font-size:12px;font-weight:700;color:'+color+'">'+wd+' days</span>';
+      })()}</td>
+      <td>${handoverBadge(p.handoverStatus||'Not Started')}</td>
+      <td>${(() => {
+        const per = currentBastPeriod(p);
+        if (!per) return '<span style="color:#9ca3af;font-size:11px">—</span>';
+        const done = per.steps.filter(Boolean).length;
+        const cls = done===8?'badge-green':done>0?'badge-yellow':'badge-gray';
+        return '<span class="badge '+cls+'">'+per.label+'</span>';
+      })()}</td>
+      <td>${bastProgressHtml(p)}</td>
+      <td>${(() => {
+        const cms = p.cmRequests||[];
+        const active = cms.filter(c=>c.status==='Open'||c.status==='In Progress').length;
+        const total = cms.length;
+        const bg = active>0?'#fee2e2':total>0?'#dcfce7':'#f3f4f6';
+        const color = active>0?'#dc2626':total>0?'#16a34a':'#9ca3af';
+        const label = active>0?String(active):total>0?'✓':'—';
+        const title = total===0?'No CM requests':`${total} CM request(s)${active>0?' — '+active+' active':''}`;
+        return `<span onclick="showCmDetail(${p.id})" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:11px;font-weight:700;background:${bg};color:${color}" title="${title}">${label}</span>`;
+      })()}</td>
+      <td>${(() => {
+        const pms = p.pmRequests||[];
+        const active = pms.filter(r=>r.status==='Open'||r.status==='In Progress').length;
+        const total = pms.length;
+        const bg = active>0?'#fff7ed':total>0?'#dcfce7':'#f3f4f6';
+        const color = active>0?'#c2410c':total>0?'#16a34a':'#9ca3af';
+        const label = active>0?String(active):total>0?'✓':'—';
+        const title = total===0?'No PM requests':`${total} PM request(s)${active>0?' — '+active+' active':''}`;
+        return `<span onclick="showPmDetail(${p.id})" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:11px;font-weight:700;background:${bg};color:${color}" title="${title}">${label}</span>`;
+      })()}</td>
+      <td>${issHtml}</td>
+      <td>
+        ${can('edit_project') ? `<button class="btn-sm btn-edit" onclick="openEditModal(${p.id})">Edit</button>` : ''}
+        ${can('delete_project') ? `<button class="btn-sm btn-delete" onclick="deleteProject(${p.id})" style="margin-left:4px">Del</button>` : ''}
+        ${!can('edit_project') && !can('delete_project') ? '<span style="color:#d1d5db;font-size:11px">—</span>' : ''}
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th>#</th><th>PID / Company</th><th>Project Description</th><th>Overall Status</th>
+        <th>Project Admin</th><th>Project Manager</th><th>Operation Manager</th>
+        <th>Contract Start</th><th>Contract End</th><th>Workdays Left</th><th>Handover</th><th>Current BAST Period</th><th>BAST Progress</th><th>CM</th><th>PM</th><th>Issues</th><th>Actions</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
+function renderReminders() {
+  const over=[], soon=[], up=[];
+  projects.forEach(p => {
+    if (p.status==='Completed' || p.status==='Not Started') return;
+    // Contract end reminder
+    const deadlineDiff = daysDiff(p.deadline);
+    if (deadlineDiff!==null) {
+      const item = {pid:p.pid, projectId:p.id, tab:'projects', company:p.company, diff:deadlineDiff, label:`Contract End: ${p.name}`, date:p.deadline};
+      if (deadlineDiff<0) over.push(item);
+      else if (deadlineDiff<=7) soon.push(item);
+      else if (deadlineDiff<=30) up.push(item);
+    }
+    // BAST billing: remind for each incomplete period that has a submitDeadline
+    getBastPeriods(p).filter(per => !per.steps.every(Boolean) && per.submitDeadline).forEach(per => {
+      const diff = daysDiff(per.submitDeadline);
+      if (diff===null) return;
+      const item = {pid:p.pid, projectId:p.id, tab:'bast', company:p.company, diff, label:`BAST Submit (${per.label}): ${p.name}`, date:per.submitDeadline};
+      if (diff<0) over.push(item);
+      else if (diff<=7) soon.push(item);
+      else if (diff<=30) up.push(item);
+    });
+    (p.cmRequests||[]).filter(c=>c.status==='Open'||c.status==='In Progress').forEach(c => {
+      const diff = daysDiff(c.startDate||c.requestDate);
+      if (diff===null) return;
+      const item = {pid:p.pid, projectId:p.id, tab:'cm', company:p.company, diff, label:`CM (${c.status}): ${c.title||p.name}`, date:c.startDate||c.requestDate};
+      if (diff<0) over.push(item);
+      else if (diff<=7) soon.push(item);
+      else if (diff<=30) up.push(item);
+    });
+    (p.pmRequests||[]).filter(r=>r.status==='Open'||r.status==='In Progress').forEach(r => {
+      const diff = daysDiff(r.startDate||r.requestDate);
+      if (diff===null) return;
+      const item = {pid:p.pid, projectId:p.id, tab:'pm', company:p.company, diff, label:`PM (${r.status}): ${r.title||p.name}`, date:r.startDate||r.requestDate};
+      if (diff<0) over.push(item);
+      else if (diff<=7) soon.push(item);
+      else if (diff<=30) up.push(item);
+    });
+  });
+
+  const tabLabels = {projects:'Project Overview', bast:'BAST Billing', cm:'CM Meetings', pm:'PM Meetings'};
+  function grp(title, items, cls, dot) {
+    if (!items.length) return '';
+    return `<div class="reminder-section"><h3>${title} (${items.length})</h3>${
+      items.sort((a,b)=>a.diff-b.diff).map(i=>`
+        <div class="reminder-row ${cls}" onclick="goToReminder('${i.tab}','${i.projectId}','${i.pid}')" title="Go to ${tabLabels[i.tab]||i.tab} → ${i.pid}">
+          <div class="reminder-dot ${dot}"></div>
+          <div style="flex:1">
+            <div class="reminder-text">${i.label} <span style="font-size:10px;color:#888">[${i.pid}]</span></div>
+            <div class="reminder-sub">${i.company} &nbsp;·&nbsp; <span style="font-size:10px;color:var(--accent)">→ ${tabLabels[i.tab]||i.tab}</span></div>
+          </div>
+          <div class="reminder-date">${i.diff<0?`${Math.abs(i.diff)}d overdue`:i.diff===0?'Today':`${i.diff}d left`}</div>
+        </div>`).join('')
+    }</div>`;
+  }
+
+  const html = grp('🔴 Overdue / Missed', over,'overdue','dot-red')
+             + grp('🟡 Due Within 7 Days', soon,'soon','dot-yellow')
+             + grp('🔵 Upcoming (8–30 Days)', up,'upcoming','dot-blue');
+  document.getElementById('mainContent').innerHTML = html || '<div class="empty-state"><div class="icon">✅</div><div>No reminders in the next 30 days</div></div>';
+}
+
+function goToReminder(tab, projectId, pid) {
+  // For CM/PM: filter search to that project's PID so only that project's rows show
+  if (tab === 'cm' || tab === 'pm') {
+    const sb = document.getElementById('searchBox');
+    if (sb) sb.value = pid;
+  } else {
+    // Clear search so the project is visible
+    const sb = document.getElementById('searchBox');
+    if (sb) sb.value = '';
+  }
+  switchTab(tab);
+  // After render, scroll to and highlight the specific project element
+  setTimeout(() => {
+    let el = null;
+    if (tab === 'bast') {
+      el = document.getElementById('bast-project-' + projectId);
+    } else if (tab === 'projects') {
+      el = document.getElementById('project-row-' + projectId);
+    } else if (tab === 'cm' || tab === 'pm') {
+      // Scroll to first table row containing the PID
+      el = document.querySelector('td .pid');
+      if (el) el = el.closest('tr');
+    }
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.transition = 'box-shadow .3s, outline .3s';
+      el.style.outline = '2px solid #3b82f6';
+      el.style.borderRadius = '8px';
+      setTimeout(() => { el.style.outline = ''; }, 2000);
+    }
+  }, 120);
+}
+
+function toggleAllPeriods(periodsId, btnEl) {
+  const container = document.getElementById(periodsId);
+  if (!container) return;
+  const isHidden = container.style.display === 'none';
+  container.style.display = isHidden ? '' : 'none';
+  btnEl.textContent = isHidden ? '▲ Minimize' : '▼ Show Periods';
+}
+
+function setBastPeriodStatus(projectId, periodIdx, status) {
+  const p = projects.find(x => x.id === projectId);
+  if (!p) return;
+  const openStates = saveBastOpenStates();
+  const periods = getBastPeriods(p);
+  periods[periodIdx].steps = periods[periodIdx].steps.map(() => status === 'billed');
+  saveBastPeriods(projectId, periods);
+  renderBAST();
+  restoreBastOpenStates(openStates);
+}
+
+function toggleBastPeriodStep(projectId, periodIdx, stepIdx) {
+  const p = projects.find(x => x.id === projectId);
+  if (!p) return;
+  const openStates = saveBastOpenStates();
+  const periods = getBastPeriods(p);
+  periods[periodIdx].steps[stepIdx] = !periods[periodIdx].steps[stepIdx];
+  saveBastPeriods(projectId, periods);
+  renderBAST();
+  restoreBastOpenStates(openStates);
+}
+
+function saveBastSubmitDeadline(projectId, periodIdx, dateVal) {
+  const p = projects.find(x => x.id === projectId);
+  if (!p) return;
+  const periods = getBastPeriods(p);
+  periods[periodIdx].submitDeadline = dateVal;
+  saveBastPeriods(projectId, periods);
+  // Update only the urgency label in-place, no full re-render
+  const labelEl = document.getElementById(`submit-label-${projectId}-${periodIdx}`);
+  const inputEl = document.getElementById(`submit-input-${projectId}-${periodIdx}`);
+  if (!labelEl || !inputEl) return;
+  const diff = dateVal ? Math.ceil((new Date(dateVal) - new Date()) / 864e5) : null;
+  const color = diff===null?'#9ca3af':diff<0?'#dc2626':diff<=14?'#d97706':'#16a34a';
+  inputEl.style.borderColor = color;
+  inputEl.style.color = color;
+  labelEl.innerHTML = diff===null?'':diff<0?'<span style="font-size:10px;font-weight:700;color:#dc2626">Overdue!</span>':diff===0?'<span style="font-size:10px;font-weight:700;color:#d97706">Due today</span>':diff<=14?`<span style="font-size:10px;font-weight:700;color:#d97706">${diff}d left</span>`:`<span style="font-size:10px;color:#16a34a">${diff}d left</span>`;
+}
+
+function saveBastOpenStates() {
+  const states = {};
+  // Save period-level collapse state
+  document.querySelectorAll('[data-period-key]').forEach(el => {
+    const body = document.getElementById('period-body-' + el.dataset.periodKey);
+    if (body) states['period:' + el.dataset.periodKey] = body.style.display !== 'none';
+  });
+  // Save project card minimize state
+  document.querySelectorAll('[id^="card-"][id$="-periods"]').forEach(el => {
+    states['card:' + el.id] = el.style.display !== 'none';
+  });
+  return states;
+}
+
+function restoreBastOpenStates(states) {
+  Object.entries(states).forEach(([key, open]) => {
+    if (key.startsWith('period:')) {
+      const pKey = key.slice(7);
+      const body = document.getElementById('period-body-' + pKey);
+      const chevron = document.getElementById('period-chevron-' + pKey);
+      if (body) body.style.display = open ? '' : 'none';
+      if (chevron) chevron.textContent = open ? '▲' : '▼';
+    } else if (key.startsWith('card:')) {
+      const cardId = key.slice(5);
+      const container = document.getElementById(cardId);
+      if (container) {
+        container.style.display = open ? '' : 'none';
+        // Update the minimize button text to match
+        // derive project id from cardId like "card-123-periods"
+        const projId = cardId.replace('card-','').replace('-periods','');
+        const btn = document.getElementById('card-' + projId + '-minbtn');
+        if (btn) btn.textContent = open ? '▲ Minimize' : '▼ Show Periods';
+      }
+    }
+  });
+}
+
+function togglePeriod(key) {
+  const body = document.getElementById('period-body-' + key);
+  const chevron = document.getElementById('period-chevron-' + key);
+  if (!body) return;
+  const nowOpen = body.style.display !== 'none';
+  body.style.display = nowOpen ? 'none' : '';
+  if (chevron) chevron.textContent = nowOpen ? '▼' : '▲';
+}
+
+function renderBAST() {
+  const data = getFiltered();
+  if (!data.length) { document.getElementById('mainContent').innerHTML='<div class="empty-state"><div class="icon">📄</div><div>No projects found</div></div>'; return; }
+
+  const cards = data.map(p => {
+    const periods = getBastPeriods(p);
+    const totalPeriods = periods.length;
+    const donePeriods = periods.filter(per => per.steps.every(Boolean)).length;
+    const hasConfig = p.contractStart && p.deadline && p.billingFreq;
+
+    if (!hasConfig && !periods.length) {
+      return `<div id="bast-project-${p.id}" style="background:white;border:1px solid #e8eaf0;border-radius:12px;padding:16px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+          <div>
+            <span style="font-weight:700;font-size:13px;color:#1e3a5f">${p.pid}</span>
+            <span style="color:#888;font-size:12px;margin-left:8px">${p.company}</span>
+          </div>
+          ${statusBadge(p.status)}
+        </div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:10px">${p.name}</div>
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e">
+          ⚠️ Set <strong>Contract Start Date</strong> and <strong>Billing Frequency</strong> to generate billing schedule.
+          <button onclick="openEditModal(${p.id})" style="margin-left:10px;padding:4px 12px;border-radius:20px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:#1e3a5f;color:white">Edit Project</button>
+          <button onclick="openAddTerminModal(${p.id})" style="margin-left:6px;padding:4px 12px;border-radius:20px;border:1px solid #7c3aed;cursor:pointer;font-size:11px;font-weight:700;background:#f5f3ff;color:#7c3aed">+ Add Termin</button>
+        </div>
+      </div>`;
+    }
+
+    const freqLabel = BILLING_FREQ_LABELS[p.billingFreq] || (hasConfig ? '' : 'Custom Termins only');
+    const progressColor = donePeriods===totalPeriods?'#16a34a':donePeriods>0?'#f59e0b':'#9ca3af';
+    const pct = totalPeriods ? Math.round((donePeriods/totalPeriods)*100) : 0;
+
+    const renderPeriodCard = (per, pi) => {
+      const stepsDone = per.steps.filter(Boolean).length;
+      const allDone = stepsDone === 8;
+      const perColor = allDone?'#16a34a':stepsDone>0?'#f59e0b':'#9ca3af';
+      const perPct = Math.round((stepsDone/8)*100);
+
+      const stepRows = BAST_STEPS.map((s, si) => {
+        const checked = per.steps[si];
+        const num = String(si+1).padStart(2,'0');
+        return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;margin-bottom:4px;background:${checked?'#f0fdf4':'#fafafa'};border:1px solid ${checked?'#bbf7d0':'#e5e7eb'}">
+          <div style="width:26px;height:26px;border-radius:7px;background:${checked?'#16a34a':'#f3f4f6'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;font-weight:700;color:${checked?'white':'#9ca3af'}">${num}</div>
+          <span style="flex:1;font-size:12px;color:${checked?'#15803d':'#374151'};font-weight:500;${checked?'text-decoration:line-through;opacity:0.65':''}">${s}</span>
+          <button onclick="toggleBastPeriodStep(${p.id},${pi},${si})" style="padding:4px 14px;border-radius:20px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:${checked?'#fee2e2':'#1e3a5f'};color:${checked?'#dc2626':'white'};white-space:nowrap">
+            ${checked?'✕ Undo':'✓ Mark Done'}
+          </button>
+        </div>`;
+      }).join('');
+
+      const pKey = `${p.id}-${pi}`;
+      const submitDiff = per.submitDeadline ? Math.ceil((new Date(per.submitDeadline)-new Date())/864e5) : null;
+      const submitColor = submitDiff===null?'#9ca3af':submitDiff<0?'#dc2626':submitDiff<=14?'#d97706':'#16a34a';
+      const submitLabel = submitDiff===null?'':submitDiff<0?'<span style="font-size:10px;font-weight:700;color:#dc2626">Overdue!</span>':submitDiff===0?'<span style="font-size:10px;font-weight:700;color:#d97706">Due today</span>':submitDiff<=14?`<span style="font-size:10px;font-weight:700;color:#d97706">${submitDiff}d left</span>`:`<span style="font-size:10px;color:#16a34a">${submitDiff}d left</span>`;
+      // For custom termins, find index within customTermins array for edit/delete
+      const customTerminIdx = per.isCustom ? (p.customTermins||[]).findIndex(t => t.label === per.label) : -1;
+      const customActions = per.isCustom ? `
+        <button onclick="openEditTerminModal(${p.id},${customTerminIdx})" style="padding:3px 8px;border-radius:12px;border:1px solid #d1d5db;background:white;font-size:10px;font-weight:600;cursor:pointer;color:#555">✏️</button>
+        <button onclick="deleteTermin(${p.id},${customTerminIdx})" style="padding:3px 8px;border-radius:12px;border:1px solid #fca5a5;background:#fee2e2;font-size:10px;font-weight:600;cursor:pointer;color:#dc2626">🗑</button>` : '';
+      const customBadge = per.isCustom ? `<span style="padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700;background:#ede9fe;color:#7c3aed;margin-left:4px">TERMIN</span>` : '';
+      return `<div data-period-key="${pKey}" style="border:1px solid ${per.isCustom?'#ddd6fe':allDone?'#bbf7d0':stepsDone>0?'#fde68a':'#e5e7eb'};border-radius:10px;margin-bottom:8px;overflow:hidden">
+        <div style="background:${per.isCustom?'#f5f3ff':allDone?'#f0fdf4':stepsDone>0?'#fffbeb':'#fafafa'}">
+          <div style="display:flex;align-items:center;gap:10px;padding:11px 14px">
+            <div onclick="togglePeriod('${pKey}')" style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;min-width:0">
+              <div style="width:28px;height:28px;border-radius:50%;background:${per.isCustom?'#7c3aed':perColor};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:700;color:white">${pi+1}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:700;color:#1a1a2e">${per.label}${customBadge}</div>
+                <div style="font-size:10px;color:#888;margin-top:1px">${fmtRaw(per.start)} → ${fmtRaw(per.end)}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                <div style="width:80px;height:5px;background:#e5e7eb;border-radius:3px;overflow:hidden">
+                  <div style="width:${perPct}%;height:100%;background:${per.isCustom&&!allDone?'#7c3aed':perColor};border-radius:3px"></div>
+                </div>
+                <span style="font-size:11px;font-weight:700;color:${perColor};white-space:nowrap">${stepsDone}/8</span>
+                <span class="badge badge-${allDone?'green':stepsDone>0?'yellow':'gray'}">${allDone?'Billed':stepsDone>0?'In Progress':'Pending'}</span>
+                <span id="period-chevron-${pKey}" style="font-size:12px;color:#9ca3af">▼</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+              ${customActions}
+              <select onchange="setBastPeriodStatus(${p.id},${pi},this.value);this.value=''" style="padding:4px 8px;border-radius:20px;border:1px solid #d1d5db;font-size:11px;font-weight:600;background:white;cursor:pointer;color:#374151">
+                <option value="">Quick set…</option>
+                <option value="billed">✓ Billed</option>
+                <option value="pending">✕ Pending</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:0 14px 10px 54px">
+            <span style="font-size:10px;color:#888">📋 Submit by:</span>
+            <input type="date" id="submit-input-${p.id}-${pi}" value="${per.submitDeadline||''}" onchange="saveBastSubmitDeadline(${p.id},${pi},this.value)" style="font-size:11px;padding:3px 8px;border:1px solid ${submitColor};border-radius:6px;color:${submitColor};background:white">
+            <span id="submit-label-${p.id}-${pi}">${submitLabel}</span>
+          </div>
+        </div>
+        <div id="period-body-${pKey}" style="display:none;padding:12px 14px;background:white">${stepRows}</div>
+      </div>`;
+    };
+
+    const pendingCards = periods.filter((_,i) => !periods[i].steps.every(Boolean)).map((per,_,arr) => renderPeriodCard(per, periods.indexOf(per))).join('');
+    const billedCards  = periods.filter((_,i) =>  periods[i].steps.every(Boolean)).map((per,_,arr) => renderPeriodCard(per, periods.indexOf(per))).join('');
+    const billedCount  = periods.filter(per => per.steps.every(Boolean)).length;
+    const billedSection = billedCount > 0 ? `
+      <div>
+        <button onclick="const d=document.getElementById('billed-${p.id}');const hidden=d.style.display==='none';d.style.display=hidden?'':'none';this.textContent=hidden?'▲ Hide ${billedCount} billed':'▼ Show ${billedCount} billed'" style="padding:5px 14px;border-radius:20px;border:1px dashed #16a34a;background:#f0fdf4;font-size:11px;font-weight:600;cursor:pointer;color:#16a34a;margin-bottom:8px">▼ Show ${billedCount} billed</button>
+        <div id="billed-${p.id}" style="display:none">${billedCards}</div>
+      </div>` : '';
+
+    return `<div id="bast-project-${p.id}" style="background:white;border:1px solid #e8eaf0;border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px;flex-wrap:wrap">
+        <div>
+          <span style="font-weight:700;font-size:13px;color:#1e3a5f">${p.pid}</span>
+          <span style="color:#888;font-size:12px;margin-left:8px">${p.company}</span>
+          <div style="font-size:12px;font-weight:600;margin-top:3px">${p.name}</div>
+          <div style="font-size:11px;color:#888;margin-top:2px">📅 ${fmtRaw(p.contractStart)} → ${fmtRaw(p.deadline)} &nbsp;·&nbsp; 🔄 ${freqLabel}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          ${statusBadge(p.status)}
+          <span style="font-size:13px;font-weight:700;color:${progressColor}">${donePeriods}/${totalPeriods} billed</span>
+          <button onclick="openAddTerminModal(${p.id})" style="padding:4px 10px;border-radius:20px;border:1px solid #7c3aed;background:#f5f3ff;font-size:11px;font-weight:600;cursor:pointer;color:#7c3aed;white-space:nowrap">+ Termin</button>
+          <button id="card-${p.id}-minbtn" onclick="toggleAllPeriods('card-${p.id}-periods',this)" style="padding:4px 10px;border-radius:20px;border:1px solid #d1d5db;background:white;font-size:11px;font-weight:600;cursor:pointer;color:#555;white-space:nowrap">▲ Minimize</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <div style="flex:1;height:7px;background:#e5e7eb;border-radius:4px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${progressColor};border-radius:4px;transition:width .3s"></div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:${progressColor}">${pct}% billed</span>
+      </div>
+      <div id="card-${p.id}-periods">${pendingCards}${billedSection}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML = cards;
+}
+
+function renderCM() {
+  const search = (document.getElementById('searchBox').value||'').toLowerCase();
+  const filterComp = document.getElementById('filterCompany').value;
+  const rows = [];
+  projects.forEach(p => {
+    if (filterComp && p.company !== filterComp) return;
+    if (search && !p.pid.toLowerCase().includes(search) && !p.name.toLowerCase().includes(search) && !p.company.toLowerCase().includes(search)) return;
+    (p.cmRequests||[]).forEach(cm => rows.push({ p, cm }));
+  });
+  rows.sort((a,b) => {
+    const ord = {'Open':0,'In Progress':1,'Resolved':2};
+    const sa = ord[a.cm.status]??3, sb = ord[b.cm.status]??3;
+    if (sa!==sb) return sa-sb;
+    return (b.cm.startDate||b.cm.requestDate||'').localeCompare(a.cm.startDate||a.cm.requestDate||'');
+  });
+  const addBtn = `<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-primary" onclick="openAddCmModal(null)">+ Add CM Request</button></div>`;
+  if (!rows.length) {
+    document.getElementById('mainContent').innerHTML = addBtn + `<div class="empty-state"><div class="icon">🔧</div><div>No CM requests yet. Add one to get started.</div></div>`;
+    return;
+  }
+  const tableRows = rows.map(({p, cm}) => {
+    const bg = cm.status==='Open'?'#fee2e2':cm.status==='In Progress'?'#fff7ed':'#dcfce7';
+    const col = cm.status==='Open'?'#dc2626':cm.status==='In Progress'?'#c2410c':'#16a34a';
+    const diff = daysDiff(cm.requestDate);
+    const age = diff===null?'—':diff<0?`<span style="color:#888">${Math.abs(diff)}d ago</span>`:`<span style="color:#3b82f6">in ${diff}d</span>`;
+    return `<tr>
+      <td><div class="pid">${p.pid}</div><div class="company">${p.company}</div></td>
+      <td><div class="projname">${p.name}</div></td>
+      <td><span style="display:inline-block;padding:3px 8px;border-radius:12px;font-size:10px;font-weight:700;background:${bg};color:${col}">${cm.status}</span></td>
+      <td><span class="date-cell">${formatDate(cm.startDate||cm.requestDate||'')}${cm.startTime?` 🕐 ${cm.startTime}`:''}${(cm.endDate||cm.endTime)?`<br><span style="font-size:10px;color:#6b7280">→ ${formatDate(cm.endDate||'')}${cm.endTime?' 🕐 '+cm.endTime:''}</span>`:''}</span></td>
+      <td style="max-width:240px;font-size:12px;font-weight:600">${cm.title||'—'}</td>
+      <td style="font-size:12px;font-weight:500">${cm.picUtama||'<span style="color:#d1d5db">—</span>'}</td>
+      <td style="font-size:12px">${cm.picSupport||'<span style="color:#d1d5db">—</span>'}</td>
+      <td><span class="date-cell">${cm.resolvedDate?formatDate(cm.resolvedDate):'—'}</span></td>
+      <td style="font-size:11px;color:#888;max-width:160px">${cm.notes||'—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn-sm btn-edit" onclick="openEditCmModal(${p.id},${cm.id})">Edit</button>
+        <button class="btn-sm btn-delete" onclick="deleteCmRequest(${p.id},${cm.id})" style="margin-left:4px">Del</button>
+      </td>
+    </tr>`;
+  }).join('');
+  document.getElementById('mainContent').innerHTML = addBtn + `
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th>PID / Company</th><th>Project</th><th>Status</th><th>Schedule</th>
+        <th>Description</th><th>PIC Utama</th><th>PIC Support</th><th>Resolved Date</th><th>Notes</th><th>Actions</th>
+      </tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table></div>`;
+}
+
+// ── CM REQUEST CRUD ──
+let editingCmCtx = null; // { projectId, cmId }
+
+function openAddCmModal(projectId) {
+  editingCmCtx = null;
+  document.getElementById('cmModalTitle').textContent = 'Add CM Request';
+  const sel = document.getElementById('cm_projectId');
+  sel.disabled = false;
+  sel.innerHTML = projects.map(p=>`<option value="${p.id}"${p.id===projectId?' selected':''}>${p.pid} — ${p.company.substring(0,30)}</option>`).join('');
+  document.getElementById('cm_startDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('cm_startTime').value = new Date().toTimeString().slice(0,5);
+  document.getElementById('cm_endDate').value = '';
+  document.getElementById('cm_endTime').value = '';
+  document.getElementById('cm_status').value = 'Open';
+  document.getElementById('cm_title').value = '';
+  document.getElementById('cm_resolvedDate').value = '';
+  document.getElementById('cm_picUtama').value = '';
+  document.getElementById('cm_picSupport').value = '';
+  document.getElementById('cm_notes').value = '';
+  document.getElementById('cmModal').classList.add('show');
+}
+
+function openEditCmModal(projectId, cmId) {
+  const p = projects.find(x=>x.id===projectId); if(!p) return;
+  const cm = (p.cmRequests||[]).find(x=>x.id===cmId); if(!cm) return;
+  editingCmCtx = { projectId, cmId };
+  document.getElementById('cmModalTitle').textContent = 'Edit CM Request';
+  const sel = document.getElementById('cm_projectId');
+  sel.innerHTML = projects.map(p2=>`<option value="${p2.id}"${p2.id===projectId?' selected':''}>${p2.pid} — ${p2.company.substring(0,30)}</option>`).join('');
+  sel.disabled = true;
+  document.getElementById('cm_startDate').value = cm.startDate||cm.requestDate||'';
+  document.getElementById('cm_startTime').value = cm.startTime||cm.requestTime||'';
+  document.getElementById('cm_endDate').value = cm.endDate||'';
+  document.getElementById('cm_endTime').value = cm.endTime||'';
+  document.getElementById('cm_status').value = cm.status||'Open';
+  document.getElementById('cm_title').value = cm.title||'';
+  document.getElementById('cm_resolvedDate').value = cm.resolvedDate||'';
+  document.getElementById('cm_picUtama').value = cm.picUtama||'';
+  document.getElementById('cm_picSupport').value = cm.picSupport||'';
+  document.getElementById('cm_notes').value = cm.notes||'';
+  document.getElementById('cmModal').classList.add('show');
+}
+
+function closeCmModal() {
+  document.getElementById('cmModal').classList.remove('show');
+  document.getElementById('cm_projectId').disabled = false;
+  editingCmCtx = null;
+}
+
+function saveCmRequest() {
+  const title = document.getElementById('cm_title').value.trim();
+  const startDate = document.getElementById('cm_startDate').value;
+  if (!title) { alert('Description is required.'); return; }
+  if (!startDate) { alert('From Date is required.'); return; }
+  const projectId = parseInt(document.getElementById('cm_projectId').value);
+  const p = projects.find(x=>x.id===projectId); if(!p) return;
+  if (!p.cmRequests) p.cmRequests = [];
+  const data = {
+    startDate,
+    startTime: document.getElementById('cm_startTime').value,
+    endDate: document.getElementById('cm_endDate').value,
+    endTime: document.getElementById('cm_endTime').value,
+    title,
+    status: document.getElementById('cm_status').value,
+    resolvedDate: document.getElementById('cm_resolvedDate').value,
+    picUtama: document.getElementById('cm_picUtama').value.trim(),
+    picSupport: document.getElementById('cm_picSupport').value.trim(),
+    notes: document.getElementById('cm_notes').value.trim()
+  };
+  if (editingCmCtx) {
+    const idx = p.cmRequests.findIndex(x=>x.id===editingCmCtx.cmId);
+    if (idx>=0) p.cmRequests[idx] = { ...p.cmRequests[idx], ...data };
+  } else {
+    data.id = Date.now();
+    p.cmRequests.push(data);
+  }
+  save(); closeCmModal(); renderCM();
+}
+
+function deleteCmRequest(projectId, cmId) {
+  if (!confirm('Delete this CM request?')) return;
+  const p = projects.find(x=>x.id===projectId); if(!p) return;
+  p.cmRequests = (p.cmRequests||[]).filter(x=>x.id!==cmId);
+  save(); renderCM();
+}
+
+function renderPM() {
+  const search = (document.getElementById('searchBox').value||'').toLowerCase();
+  const filterComp = document.getElementById('filterCompany').value;
+  const rows = [];
+  projects.forEach(p => {
+    if (filterComp && p.company !== filterComp) return;
+    if (search && !p.pid.toLowerCase().includes(search) && !p.name.toLowerCase().includes(search) && !p.company.toLowerCase().includes(search)) return;
+    (p.pmRequests||[]).forEach(r => rows.push({ p, r }));
+  });
+  rows.sort((a,b) => {
+    const ord = {'Open':0,'In Progress':1,'Resolved':2};
+    const sa = ord[a.r.status]??3, sb = ord[b.r.status]??3;
+    if (sa!==sb) return sa-sb;
+    return (b.r.startDate||b.r.requestDate||'').localeCompare(a.r.startDate||a.r.requestDate||'');
+  });
+  const addBtn = `<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-primary" onclick="openAddPmModal(null)">+ Add PM Request</button></div>`;
+  if (!rows.length) {
+    document.getElementById('mainContent').innerHTML = addBtn + `<div class="empty-state"><div class="icon">🔧</div><div>No PM requests yet. Add one to get started.</div></div>`;
+    return;
+  }
+  const tableRows = rows.map(({p, r}) => {
+    const bg = r.status==='Open'?'#fff7ed':r.status==='In Progress'?'#fffbeb':'#dcfce7';
+    const col = r.status==='Open'?'#c2410c':r.status==='In Progress'?'#a16207':'#16a34a';
+    const diff = daysDiff(r.requestDate);
+    const age = diff===null?'—':diff<0?`<span style="color:#888">${Math.abs(diff)}d ago</span>`:`<span style="color:#3b82f6">in ${diff}d</span>`;
+    return `<tr>
+      <td><div class="pid">${p.pid}</div><div class="company">${p.company}</div></td>
+      <td><div class="projname">${p.name}</div></td>
+      <td><span style="display:inline-block;padding:3px 8px;border-radius:12px;font-size:10px;font-weight:700;background:${bg};color:${col}">${r.status}</span></td>
+      <td><span class="date-cell">${formatDate(r.startDate||r.requestDate||'')}${r.startTime?` 🕐 ${r.startTime}`:''}${(r.endDate||r.endTime)?`<br><span style="font-size:10px;color:#6b7280">→ ${formatDate(r.endDate||'')}${r.endTime?' 🕐 '+r.endTime:''}</span>`:''}</span></td>
+      <td style="max-width:240px;font-size:12px;font-weight:600">${r.title||'—'}</td>
+      <td style="font-size:12px;font-weight:500">${r.picUtama||'<span style="color:#d1d5db">—</span>'}</td>
+      <td style="font-size:12px">${r.picSupport||'<span style="color:#d1d5db">—</span>'}</td>
+      <td><span class="date-cell">${r.resolvedDate?formatDate(r.resolvedDate):'—'}</span></td>
+      <td style="font-size:11px;color:#888;max-width:160px">${r.notes||'—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn-sm btn-edit" onclick="openEditPmModal(${p.id},${r.id})">Edit</button>
+        <button class="btn-sm btn-delete" onclick="deletePmRequest(${p.id},${r.id})" style="margin-left:4px">Del</button>
+      </td>
+    </tr>`;
+  }).join('');
+  document.getElementById('mainContent').innerHTML = addBtn + `
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th>PID / Company</th><th>Project</th><th>Status</th><th>Schedule</th>
+        <th>Description</th><th>PIC Utama</th><th>PIC Support</th><th>Resolved Date</th><th>Notes</th><th>Actions</th>
+      </tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table></div>`;
+}
+
+// ── PM REQUEST CRUD ──
+let editingPmCtx = null;
+
+function openAddPmModal(projectId) {
+  editingPmCtx = null;
+  document.getElementById('pmModalTitle').textContent = 'Add PM Request';
+  const sel = document.getElementById('pm_projectId');
+  sel.disabled = false;
+  sel.innerHTML = projects.map(p=>`<option value="${p.id}"${p.id===projectId?' selected':''}>${p.pid} — ${p.company.substring(0,30)}</option>`).join('');
+  document.getElementById('pm_startDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('pm_startTime').value = new Date().toTimeString().slice(0,5);
+  document.getElementById('pm_endDate').value = '';
+  document.getElementById('pm_endTime').value = '';
+  document.getElementById('pm_status').value = 'Open';
+  document.getElementById('pm_title').value = '';
+  document.getElementById('pm_resolvedDate').value = '';
+  document.getElementById('pm_picUtama').value = '';
+  document.getElementById('pm_picSupport').value = '';
+  document.getElementById('pm_notes').value = '';
+  document.getElementById('pmReqModal').classList.add('show');
+}
+
+function openEditPmModal(projectId, pmId) {
+  const p = projects.find(x=>x.id===projectId); if(!p) return;
+  const r = (p.pmRequests||[]).find(x=>x.id===pmId); if(!r) return;
+  editingPmCtx = { projectId, pmId };
+  document.getElementById('pmModalTitle').textContent = 'Edit PM Request';
+  const sel = document.getElementById('pm_projectId');
+  sel.innerHTML = projects.map(p2=>`<option value="${p2.id}"${p2.id===projectId?' selected':''}>${p2.pid} — ${p2.company.substring(0,30)}</option>`).join('');
+  sel.disabled = true;
+  document.getElementById('pm_startDate').value = r.startDate||r.requestDate||'';
+  document.getElementById('pm_startTime').value = r.startTime||r.requestTime||'';
+  document.getElementById('pm_endDate').value = r.endDate||'';
+  document.getElementById('pm_endTime').value = r.endTime||'';
+  document.getElementById('pm_status').value = r.status||'Open';
+  document.getElementById('pm_title').value = r.title||'';
+  document.getElementById('pm_resolvedDate').value = r.resolvedDate||'';
+  document.getElementById('pm_picUtama').value = r.picUtama||'';
+  document.getElementById('pm_picSupport').value = r.picSupport||'';
+  document.getElementById('pm_notes').value = r.notes||'';
+  document.getElementById('pmReqModal').classList.add('show');
+}
+
+function closePmModal() {
+  document.getElementById('pmReqModal').classList.remove('show');
+  document.getElementById('pm_projectId').disabled = false;
+  editingPmCtx = null;
+}
+
+function savePmRequest() {
+  const title = document.getElementById('pm_title').value.trim();
+  const startDate = document.getElementById('pm_startDate').value;
+  if (!title) { alert('Description is required.'); return; }
+  if (!startDate) { alert('From Date is required.'); return; }
+  const projectId = parseInt(document.getElementById('pm_projectId').value);
+  const p = projects.find(x=>x.id===projectId); if(!p) return;
+  if (!p.pmRequests) p.pmRequests = [];
+  const data = {
+    startDate,
+    startTime: document.getElementById('pm_startTime').value,
+    endDate: document.getElementById('pm_endDate').value,
+    endTime: document.getElementById('pm_endTime').value,
+    title,
+    status: document.getElementById('pm_status').value,
+    resolvedDate: document.getElementById('pm_resolvedDate').value,
+    picUtama: document.getElementById('pm_picUtama').value.trim(),
+    picSupport: document.getElementById('pm_picSupport').value.trim(),
+    notes: document.getElementById('pm_notes').value.trim()
+  };
+  if (editingPmCtx) {
+    const idx = p.pmRequests.findIndex(x=>x.id===editingPmCtx.pmId);
+    if (idx>=0) p.pmRequests[idx] = { ...p.pmRequests[idx], ...data };
+  } else {
+    data.id = Date.now();
+    p.pmRequests.push(data);
+  }
+  save(); closePmModal(); renderPM();
+}
+
+function deletePmRequest(projectId, pmId) {
+  if (!confirm('Delete this PM request?')) return;
+  const p = projects.find(x=>x.id===projectId); if(!p) return;
+  p.pmRequests = (p.pmRequests||[]).filter(x=>x.id!==pmId);
+  save(); renderPM();
+}
+
+function showPmDetail(id) {
+  const p = projects.find(x=>x.id===id); if(!p) return;
+  const pms = p.pmRequests||[];
+  document.getElementById('issueModalTitle').textContent = `PM Requests — ${p.pid}`;
+  let body;
+  if (!pms.length) {
+    body = `<div style="text-align:center;padding:20px;color:#9ca3af">No PM requests for this project.</div>
+      <div style="text-align:center;margin-top:8px"><button class="btn btn-primary" onclick="closeIssueModal();openAddPmModal(${id})">+ Add PM Request</button></div>`;
+  } else {
+    body = `<div style="display:flex;flex-direction:column;gap:8px;padding:4px 0">` +
+      pms.map(r => {
+        const bg = r.status==='Open'?'#fff7ed':r.status==='In Progress'?'#fffbeb':'#dcfce7';
+        const col = r.status==='Open'?'#c2410c':r.status==='In Progress'?'#a16207':'#16a34a';
+        return `<div style="background:#f8f9fc;border-radius:8px;padding:10px 12px;border:1px solid #e8eaf0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:${bg};color:${col}">${r.status}</span>
+            <span style="font-size:11px;color:#888">${formatDate(r.startDate||r.requestDate||'')}${r.startTime?' 🕐 '+r.startTime:''}${r.endDate?` → ${formatDate(r.endDate)}${r.endTime?' 🕐 '+r.endTime:''}`:''}</span>
+          </div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:2px">${r.title||'—'}</div>
+          ${r.notes?`<div style="font-size:11px;color:#888">${r.notes}</div>`:''}
+          ${r.resolvedDate?`<div style="font-size:11px;color:#16a34a;margin-top:4px">✓ Resolved: ${formatDate(r.resolvedDate)}</div>`:''}
+        </div>`;
+      }).join('') + `</div>`;
+  }
+  document.getElementById('issueModalBody').innerHTML = body;
+  document.getElementById('issueModal').classList.add('show');
+}
+
+let terminCtx = null; // { projectId, terminIdx (null = add) }
+
+function openAddTerminModal(projectId) {
+  const p = projects.find(x => x.id === projectId);
+  if (!p) return;
+  terminCtx = { projectId, terminIdx: null };
+  const nextNum = (p.customTermins || []).length + 1;
+  document.getElementById('terminModalTitle').textContent = 'Add Custom Termin';
+  document.getElementById('termin_label').value = 'Termin ' + nextNum;
+  document.getElementById('termin_start').value = '';
+  document.getElementById('termin_end').value = '';
+  document.getElementById('terminModal').classList.add('show');
+}
+
+function openEditTerminModal(projectId, terminIdx) {
+  const p = projects.find(x => x.id === projectId);
+  if (!p) return;
+  const t = (p.customTermins || [])[terminIdx];
+  if (!t) return;
+  terminCtx = { projectId, terminIdx };
+  document.getElementById('terminModalTitle').textContent = 'Edit Termin';
+  document.getElementById('termin_label').value = t.label || '';
+  document.getElementById('termin_start').value = t.start || '';
+  document.getElementById('termin_end').value = t.end || '';
+  document.getElementById('terminModal').classList.add('show');
+}
+
+function closeTerminModal() {
+  document.getElementById('terminModal').classList.remove('show');
+  terminCtx = null;
+}
+
+function saveTermin() {
+  const label = document.getElementById('termin_label').value.trim();
+  if (!label) { alert('Termin name is required.'); return; }
+  const { projectId, terminIdx } = terminCtx;
+  const p = projects.find(x => x.id === projectId);
+  if (!p) return;
+  if (!p.customTermins) p.customTermins = [];
+  const entry = {
+    label,
+    start: document.getElementById('termin_start').value,
+    end:   document.getElementById('termin_end').value,
+    steps: terminIdx !== null ? p.customTermins[terminIdx].steps : [false,false,false,false,false,false,false,false],
+    submitDeadline: terminIdx !== null ? (p.customTermins[terminIdx].submitDeadline || '') : ''
+  };
+  if (terminIdx !== null) {
+    p.customTermins[terminIdx] = entry;
+  } else {
+    p.customTermins.push(entry);
+  }
+  save();
+  closeTerminModal();
+  const openStates = saveBastOpenStates();
+  renderBAST();
+  restoreBastOpenStates(openStates);
+}
+
+function deleteTermin(projectId, terminIdx) {
+  if (!confirm('Delete this custom termin?')) return;
+  const p = projects.find(x => x.id === projectId);
+  if (!p || !p.customTermins) return;
+  p.customTermins.splice(terminIdx, 1);
+  save();
+  const openStates = saveBastOpenStates();
+  renderBAST();
+  restoreBastOpenStates(openStates);
+}
+
+function openExportModal() { document.getElementById('exportModal').classList.add('show'); }
+function closeExportModal() { document.getElementById('exportModal').classList.remove('show'); }
+
+function runExport(scope) {
+  closeExportModal();
+  const data = scope === 'all' ? projects : getFiltered();
+  const wb = XLSX.utils.book_new();
+  const dateStr = new Date().toISOString().slice(0,10);
+
+  // --- Sheet 1: Projects ---
+  const projRows = [['PID','Company','Project Name','Status','Project Admin','Project Manager','Operation Manager','Contract Start','Contract End','Handover Status','Issues']];
+  data.forEach(p => {
+    projRows.push([
+      p.pid, p.company, p.name, p.status,
+      p.projectAdmin||'', p.projectManager||'', p.operationManager||'',
+      p.contractStart||'', p.deadline||'',
+      p.handoverStatus||'', p.issues||''
+    ]);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(projRows), 'Projects');
+
+  // --- Sheet 2: BAST Billing ---
+  const bastRows = [['PID','Company','Project Name','Period','Period Start','Period End','Steps Done','Total Steps','Status','Submit Deadline']];
+  data.forEach(p => {
+    const periods = getBastPeriods(p);
+    periods.forEach(per => {
+      const stepsDone = per.steps.filter(Boolean).length;
+      const allDone = stepsDone === 8;
+      const status = allDone ? 'Billed' : stepsDone > 0 ? 'In Progress' : 'Pending';
+      bastRows.push([
+        p.pid, p.company, p.name,
+        per.label, per.start||'', per.end||'',
+        stepsDone, 8, status, per.submitDeadline||''
+      ]);
+    });
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(bastRows), 'BAST Billing');
+
+  // --- Sheet 3: CM Meetings ---
+  const cmRows = [['PID','Company','Project Name','Title','From Date','From Time','To Date','To Time','PIC Utama','PIC Support','Status','Resolved Date','Notes']];
+  data.forEach(p => {
+    (p.cmRequests||[]).forEach(cm => {
+      cmRows.push([p.pid, p.company, p.name, cm.title||'', cm.startDate||cm.requestDate||'', cm.startTime||cm.requestTime||'', cm.endDate||'', cm.endTime||'', cm.picUtama||'', cm.picSupport||'', cm.status||'', cm.resolvedDate||'', cm.notes||'']);
+    });
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cmRows), 'CM Meetings');
+
+  // --- Sheet 4: PM Meetings ---
+  const pmRows = [['PID','Company','Project Name','Title','From Date','From Time','To Date','To Time','PIC Utama','PIC Support','Status','Resolved Date','Notes']];
+  data.forEach(p => {
+    (p.pmRequests||[]).forEach(pm => {
+      pmRows.push([p.pid, p.company, p.name, pm.title||'', pm.startDate||pm.requestDate||'', pm.startTime||pm.requestTime||'', pm.endDate||'', pm.endTime||'', pm.picUtama||'', pm.picSupport||'', pm.status||'', pm.resolvedDate||'', pm.notes||'']);
+    });
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pmRows), 'PM Meetings');
+
+  // --- Sheet 5: Summary ---
+  const statusCounts = {};
+  data.forEach(p => { statusCounts[p.status] = (statusCounts[p.status]||0) + 1; });
+  const totalBastPeriods = data.reduce((acc,p) => acc + getBastPeriods(p).length, 0);
+  const billedPeriods    = data.reduce((acc,p) => acc + getBastPeriods(p).filter(per=>per.steps.every(Boolean)).length, 0);
+  const totalCM = data.reduce((acc,p) => acc + (p.cmRequests||[]).length, 0);
+  const totalPM = data.reduce((acc,p) => acc + (p.pmRequests||[]).length, 0);
+  const summRows = [
+    ['Summary Report', `Exported: ${dateStr}`, scope === 'all' ? 'Scope: All Projects' : 'Scope: Filtered Projects'],
+    [],
+    ['Total Projects', data.length],
+    [],
+    ['--- Status Breakdown ---'],
+    ...Object.entries(statusCounts).map(([s,c]) => [s, c]),
+    [],
+    ['--- BAST Billing ---'],
+    ['Total Billing Periods', totalBastPeriods],
+    ['Billed Periods', billedPeriods],
+    ['Pending Periods', totalBastPeriods - billedPeriods],
+    ['Billed %', totalBastPeriods ? Math.round((billedPeriods/totalBastPeriods)*100)+'%' : '0%'],
+    [],
+    ['--- Meetings ---'],
+    ['Total CM Meetings', totalCM],
+    ['Total PM Meetings', totalPM],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summRows), 'Summary');
+
+  XLSX.writeFile(wb, `project-tracker-export-${dateStr}.xlsx`);
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  const tabKeys = ['projects','reminders','bast','cm','pm','access'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', tabKeys[i]===tab));
+  renderCurrentTab();
+}
+
+function renderCurrentTab() {
+  renderSummary(); populateCompanyFilter();
+  // Show/hide toolbar Add button based on permission
+  const addBtn = document.querySelector('.toolbar .btn-primary');
+  if (addBtn) addBtn.style.display = can('add_project') ? '' : 'none';
+  if (currentTab==='projects') {
+    if (!can('view_projects')) { renderDenied(); return; }
+    renderProjects();
+  } else if (currentTab==='reminders') {
+    if (!can('view_reminders')) { renderDenied(); return; }
+    renderReminders();
+  } else if (currentTab==='bast') {
+    if (!can('view_bast')) { renderDenied(); return; }
+    renderBAST();
+  } else if (currentTab==='cm') {
+    if (!can('view_cm')) { renderDenied(); return; }
+    renderCM();
+  } else if (currentTab==='pm') {
+    if (!can('view_pm')) { renderDenied(); return; }
+    renderPM();
+  } else if (currentTab==='access') {
+    if (currentUser?.role !== 'admin') { renderDenied(); return; }
+    renderAccessControl();
+  }
+}
+
+function renderDenied() {
+  document.getElementById('mainContent').innerHTML = `
+    <div class="empty-state">
+      <div class="icon">🔒</div>
+      <div style="font-weight:600;color:#374151;font-size:14px">Access Restricted</div>
+      <div style="margin-top:6px;font-size:12px;color:#9ca3af">You don't have permission to view this section.<br>Contact your admin to request access.</div>
+    </div>`;
+}
+
+// ── ACCESS CONTROL UI ──
+function renderAccessControl() {
+  const nonAdminRoles = ROLES.filter(r => r.key !== 'admin');
+
+  const roleCards = nonAdminRoles.map(role => {
+    const perms = rolePermissions[role.key] || DEFAULT_ROLE_PERMISSIONS[role.key] || {};
+    // Count users with this role
+    const userCount = authUsers.filter(u => u.role === role.key).length;
+
+    const permRows = ALL_PERMISSIONS.map(p => {
+      const checked = perms[p.key] || false;
+      return `
+        <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:${checked?'#f0fdf4':'#fafafa'};border:1px solid ${checked?'#bbf7d0':'#e5e7eb'};border-radius:8px;cursor:pointer;transition:background .15s">
+          <input type="checkbox" ${checked?'checked':''} onchange="toggleRolePerm('${role.key}','${p.key}',this.checked)"
+            style="width:15px;height:15px;accent-color:#16a34a;cursor:pointer">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:600;color:var(--text)">${p.label}</div>
+            <div style="font-size:11px;color:var(--text-subtle)">${p.desc}</div>
+          </div>
+          <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${checked?'#dcfce7':'#f3f4f6'};color:${checked?'#15803d':'#9ca3af'}">${checked?'Allowed':'Denied'}</span>
+        </label>`;
+    }).join('');
+
+    return `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04)">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border2)">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:15px;font-weight:700;color:var(--text)">${role.label}</span>
+              <span class="badge badge-${role.badge}">${role.label}</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-subtle);margin-top:2px">${userCount} user${userCount!==1?'s':''} with this role</div>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button onclick="setAllRolePerms('${role.key}',true)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #16a34a;color:#16a34a;background:#f0fdf4;cursor:pointer;font-weight:600">Allow All</button>
+            <button onclick="setAllRolePerms('${role.key}',false)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-weight:600">Deny All</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          ${permRows}
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML = `
+    <div style="max-width:860px;margin:0 auto;padding:20px 0">
+      <div style="margin-bottom:20px">
+        <h2 style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">🔐 Access Control</h2>
+        <p style="font-size:12px;color:var(--text-subtle)">Configure permissions per role. Admin (Superuser) always has full access and cannot be restricted.</p>
+      </div>
+      ${roleCards}
+    </div>`;
+}
+
+async function toggleRolePerm(roleKey, permKey, value) {
+  if (!rolePermissions[roleKey]) rolePermissions[roleKey] = { ...(DEFAULT_ROLE_PERMISSIONS[roleKey]||{}) };
+  rolePermissions[roleKey][permKey] = value;
+  await saveRolePermissions();
+}
+
+async function setAllRolePerms(roleKey, value) {
+  rolePermissions[roleKey] = {};
+  ALL_PERMISSIONS.forEach(p => rolePermissions[roleKey][p.key] = value);
+  await saveRolePermissions();
+  renderAccessControl();
+}
+
+function openAddModal() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = 'Add New Project';
+  ['pid','company','name','issues','pa','pm','om'].forEach(f => document.getElementById('f_'+f).value='');
+  document.getElementById('f_deadline').value='';
+  document.getElementById('f_contractStart').value='';
+  document.getElementById('f_billingFreq').value='';
+  document.getElementById('f_handoverStatus').value='Not Started';
+  document.getElementById('f_status').value='On Track';
+  document.getElementById('projectModal').classList.add('show');
+}
+
+function openEditModal(id) {
+  editingId = id;
+  const p = projects.find(x=>x.id===id); if(!p) return;
+  document.getElementById('modalTitle').textContent = 'Edit Project';
+  document.getElementById('f_pid').value=p.pid;
+  document.getElementById('f_company').value=p.company;
+  document.getElementById('f_name').value=p.name;
+  document.getElementById('f_status').value=p.status;
+  document.getElementById('f_contractStart').value=p.contractStart||'';
+  document.getElementById('f_deadline').value=p.deadline||'';
+  document.getElementById('f_billingFreq').value=p.billingFreq||'';
+  document.getElementById('f_handoverStatus').value=p.handoverStatus||'Not Started';
+  document.getElementById('f_pa').value=p.projectAdmin||'';
+  document.getElementById('f_pm').value=p.projectManager||'';
+  document.getElementById('f_om').value=p.operationManager||'';
+  document.getElementById('f_issues').value=p.issues||'';
+  document.getElementById('projectModal').classList.add('show');
+}
+
+function closeModal() { document.getElementById('projectModal').classList.remove('show'); }
+
+function saveProject() {
+  const pid=document.getElementById('f_pid').value.trim();
+  const company=document.getElementById('f_company').value.trim();
+  const name=document.getElementById('f_name').value.trim();
+  if(!pid||!company||!name) { alert('PID, Company, and Project Description are required.'); return; }
+  const data = { pid, company, name,
+    status:document.getElementById('f_status').value,
+    contractStart:document.getElementById('f_contractStart').value,
+    deadline:document.getElementById('f_deadline').value,
+    billingFreq:document.getElementById('f_billingFreq').value,
+    bastDate:'',
+    handoverStatus:document.getElementById('f_handoverStatus').value,
+    projectAdmin:document.getElementById('f_pa').value.trim(),
+    projectManager:document.getElementById('f_pm').value.trim(),
+    operationManager:document.getElementById('f_om').value.trim(),
+    issues:document.getElementById('f_issues').value.trim()
+  };
+  if (editingId) {
+    const idx=projects.findIndex(p=>p.id===editingId);
+    const existing=projects[idx];
+    projects[idx]={...existing,...data,bastSteps:existing.bastSteps||[false,false,false,false,false,false,false,false],handoverStatus:data.handoverStatus||existing.handoverStatus||'Not Started',cmRequests:existing.cmRequests||[],pmRequests:existing.pmRequests||[]};
+  } else {
+    data.id=Date.now();
+    data.bastSteps=[false,false,false,false,false,false,false,false];
+    data.cmRequests=[];
+    data.pmRequests=[];
+    projects.push(data);
+  }
+  save(); closeModal(); renderCurrentTab();
+}
+
+function deleteProject(id) {
+  if(!confirm('Delete this project?')) return;
+  projects=projects.filter(p=>p.id!==id); save(); renderCurrentTab();
+}
+
+function showCmDetail(id) {
+  const p = projects.find(x=>x.id===id); if(!p) return;
+  const cms = p.cmRequests||[];
+  document.getElementById('issueModalTitle').textContent = `CM Requests — ${p.pid}`;
+  let body;
+  if (!cms.length) {
+    body = `<div style="text-align:center;padding:20px;color:#9ca3af">No CM requests for this project.</div>
+      <div style="text-align:center;margin-top:8px"><button class="btn btn-primary" onclick="closeIssueModal();openAddCmModal(${id})">+ Add CM Request</button></div>`;
+  } else {
+    body = `<div style="display:flex;flex-direction:column;gap:8px;padding:4px 0">` +
+      cms.map(cm => {
+        const bg = cm.status==='Open'?'#fee2e2':cm.status==='In Progress'?'#fff7ed':'#dcfce7';
+        const col = cm.status==='Open'?'#dc2626':cm.status==='In Progress'?'#c2410c':'#16a34a';
+        return `<div style="background:#f8f9fc;border-radius:8px;padding:10px 12px;border:1px solid #e8eaf0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:${bg};color:${col}">${cm.status}</span>
+            <span style="font-size:11px;color:#888">${formatDate(cm.startDate||cm.requestDate||'')}${cm.startTime?' 🕐 '+cm.startTime:''}${cm.endDate?` → ${formatDate(cm.endDate)}${cm.endTime?' 🕐 '+cm.endTime:''}`:''}</span>
+          </div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:2px">${cm.title||'—'}</div>
+          ${cm.notes?`<div style="font-size:11px;color:#888">${cm.notes}</div>`:''}
+          ${cm.resolvedDate?`<div style="font-size:11px;color:#16a34a;margin-top:4px">✓ Resolved: ${formatDate(cm.resolvedDate)}</div>`:''}
+        </div>`;
+      }).join('') + `</div>`;
+  }
+  document.getElementById('issueModalBody').innerHTML = body;
+  document.getElementById('issueModal').classList.add('show');
+}
+
+function showIssues(id) {
+  const p=projects.find(x=>x.id===id); if(!p) return;
+  const lines=p.issues.trim().split('\n').filter(Boolean);
+  document.getElementById('issueModalTitle').textContent=`Issues — ${p.pid}`;
+  document.getElementById('issueModalBody').innerHTML=`<div class="issue-list">${lines.map((l,i)=>`<div class="issue-item">${i+1}. ${l}</div>`).join('')}</div>`;
+  document.getElementById('issueModal').classList.add('show');
+}
+function closeIssueModal() { document.getElementById('issueModal').classList.remove('show'); }
+
+// INIT
+document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+async function initApp() {
+  // Show loading state
+  document.getElementById('mainContent').innerHTML = '<div class="empty-state"><div class="icon" style="font-size:28px">⏳</div><div>Connecting to database...</div></div>';
+
+  try {
+    // Load auth users
+    const { data: authData } = await db.from('config').select('value').eq('key','auth_users').maybeSingle();
+    if (authData?.value) {
+      authUsers = authData.value;
+    } else {
+      authUsers = JSON.parse(JSON.stringify(DEFAULT_USERS));
+      await db.from('config').upsert({ key:'auth_users', value:authUsers });
+    }
+
+    // Load role permissions
+    const { data: rpData } = await db.from('config').select('value').eq('key','role_permissions').maybeSingle();
+    if (rpData?.value) {
+      rolePermissions = rpData.value;
+    } else {
+      rolePermissions = JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS));
+      await db.from('config').upsert({ key:'role_permissions', value:rolePermissions });
+    }
+
+    // Load projects
+    const { data: projData } = await db.from('config').select('value').eq('key','projects').maybeSingle();
+    if (projData?.value) {
+      projects = projData.value;
+      projects.forEach(p => {
+        if (!p.cmRequests) p.cmRequests = [];
+        if (!p.pmRequests) p.pmRequests = [];
+        if (p.projectAdmin === undefined) p.projectAdmin = '';
+        if (p.projectManager === undefined) p.projectManager = '';
+        if (p.operationManager === undefined) p.operationManager = '';
+        if (!p.customTermins) p.customTermins = [];
+      });
+    } else {
+      projects = JSON.parse(JSON.stringify(SEED_PROJECTS));
+      await db.from('config').upsert({ key:'projects', value:projects });
+    }
+  } catch(e) {
+    console.error('Supabase error:', e);
+    document.getElementById('mainContent').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div>Could not connect to database. Check your internet connection.</div></div>';
+    return;
+  }
+
+  if (currentUser) {
+    document.getElementById('loginScreen').style.display = 'none';
+    applyAuthUI();
+    renderCurrentTab();
+  }
+}
+
+// ── THEME TOGGLE ──
+function toggleTheme() {
+  const isDark = document.body.classList.toggle('dark');
+  localStorage.setItem('pt_theme', isDark ? 'dark' : 'light');
+  document.getElementById('btnTheme').textContent = isDark ? '☀️' : '🌙';
+  renderCurrentTab(); // re-render so JS-generated content picks up new colors
+}
+
+// Apply saved theme on load (before initApp so it's instant)
+(function() {
+  const saved = localStorage.getItem('pt_theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  if (saved === 'dark' || (!saved && prefersDark)) {
+    document.body.classList.add('dark');
+    // Button text set after DOM ready
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('btnTheme');
+      if (btn) btn.textContent = '☀️';
+    });
+  }
+})();
+
+initApp();
+
+// ── FLOW FIELD LOGIN BACKGROUND ──
+(function() {
+  const canvas = document.getElementById('loginCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const color = '#818cf8';
+  const particleCount = 600;
+  const trailOpacity = 0.1;
+  const speed = 0.8;
+  let width, height, particles, animId;
+  let mouse = { x: -9999, y: -9999 };
+
+  class Particle {
+    constructor() { this.reset(true); }
+    reset(init) {
+      this.x = Math.random() * width;
+      this.y = Math.random() * height;
+      this.vx = 0; this.vy = 0; this.age = 0;
+      this.life = Math.random() * 200 + 100;
+      if (!init) { this.age = 0; }
+    }
+    update() {
+      const angle = (Math.cos(this.x * 0.005) + Math.sin(this.y * 0.005)) * Math.PI;
+      this.vx += Math.cos(angle) * 0.2 * speed;
+      this.vy += Math.sin(angle) * 0.2 * speed;
+      const dx = mouse.x - this.x, dy = mouse.y - this.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 150) {
+        const f = (150 - dist) / 150;
+        this.vx -= dx * f * 0.05;
+        this.vy -= dy * f * 0.05;
+      }
+      this.x += this.vx; this.y += this.vy;
+      this.vx *= 0.95; this.vy *= 0.95;
+      this.age++;
+      if (this.age > this.life) this.reset(false);
+      if (this.x < 0) this.x = width;
+      if (this.x > width) this.x = 0;
+      if (this.y < 0) this.y = height;
+      if (this.y > height) this.y = 0;
+    }
+    draw() {
+      const alpha = 1 - Math.abs((this.age / this.life) - 0.5) * 2;
+      ctx.globalAlpha = Math.max(0, alpha);
+      ctx.fillStyle = color;
+      ctx.fillRect(this.x, this.y, 1.5, 1.5);
+    }
+  }
+
+  function init() {
+    const dpr = window.devicePixelRatio || 1;
+    width = canvas.offsetWidth || window.innerWidth;
+    height = canvas.offsetHeight || window.innerHeight;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    particles = Array.from({ length: particleCount }, () => new Particle());
+  }
+
+  function animate() {
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(0,0,0,' + trailOpacity + ')';
+    ctx.fillRect(0, 0, width, height);
+    particles.forEach(p => { p.update(); p.draw(); });
+    animId = requestAnimationFrame(animate);
+  }
+
+  function onResize() { cancelAnimationFrame(animId); init(); animate(); }
+
+  function onMouseMove(e) {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
+  }
+
+  // Only run while login screen is visible
+  const loginEl = document.getElementById('loginScreen');
+  const obs = new MutationObserver(() => {
+    const visible = loginEl.style.display !== 'none';
+    if (visible && !animId) { init(); animate(); }
+    if (!visible) { cancelAnimationFrame(animId); animId = null; }
+  });
+  obs.observe(loginEl, { attributes: true, attributeFilter: ['style'] });
+
+  window.addEventListener('resize', onResize);
+  canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('mouseleave', () => { mouse.x = -9999; mouse.y = -9999; });
+
+  // Initial start
+  init();
+  animate();
+})();
+</script>
+</body>
+</html>
