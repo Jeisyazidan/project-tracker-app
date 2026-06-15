@@ -64,6 +64,9 @@ router.put('/:id', requirePermission('manage_cm'), async (req, res) => {
     title, start_date, start_time, end_date, end_time,
     status, resolved_date, pic_utama, pic_support, notes,
   } = req.body;
+  if (!title || !start_date) {
+    return res.status(400).json({ error: 'title and start_date are required' });
+  }
   try {
     const { rows } = await db.query(
       `UPDATE cm_requests SET
