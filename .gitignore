@@ -9,6 +9,11 @@ backend/.env
 frontend/dist/
 frontend/build/
 
+# Playwright (verification tooling — not part of the app)
+frontend/package.json~
+playwright-report/
+test-results/
+
 # OS
 .DS_Store
 Thumbs.db
