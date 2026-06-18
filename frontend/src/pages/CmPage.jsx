@@ -21,9 +21,8 @@ function ScheduleLine({ date, time, label }) {
   );
 }
 
-function RequestCard({ r, type, canManage, onEdit, onDelete }) {
+function RequestCard({ r, canManage, onEdit, onDelete }) {
   const { bg, color } = statusStyle(r.status);
-  const accentBorder  = type === 'cm' ? '#fee2e2' : '#fef9c3';
 
   return (
     <div style={{
@@ -123,7 +122,6 @@ export default function CmPage({ requests, projects, onRefresh }) {
               <RequestCard
                 key={cm.id}
                 r={cm}
-                type="cm"
                 canManage={can('manage_cm')}
                 onEdit={r => setModal({ open:true, cm:r })}
                 onDelete={handleDelete}

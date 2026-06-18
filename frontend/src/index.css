@@ -193,6 +193,21 @@ body.dark .badge-gray   { background: rgba(163,163,163,0.12);color: #a3a3a3; }
 body.dark .badge-purple { background: rgba(168,85,247,0.15); color: #c084fc; }
 body.dark .badge-orange { background: rgba(249,115,22,0.15); color: #fb923c; }
 
+/* ── Circle badges (CM/PM bubbles in table & mobile cards) ── */
+.circle-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  cursor: pointer; font-size: 11px; font-weight: 700;
+}
+.circle-badge.danger  { background: #fee2e2; color: #dc2626; }
+.circle-badge.warn    { background: #fff7ed; color: #c2410c; }
+.circle-badge.success { background: #dcfce7; color: #16a34a; }
+.circle-badge.neutral { background: #f3f4f6; color: #9ca3af; }
+body.dark .circle-badge.danger  { background: rgba(220,38,38,0.15);   color: #f87171; }
+body.dark .circle-badge.warn    { background: rgba(194,65,12,0.15);   color: #fb923c; }
+body.dark .circle-badge.success { background: rgba(22,163,74,0.15);   color: #4ade80; }
+body.dark .circle-badge.neutral { background: rgba(255,255,255,0.08); color: #6b7280; }
+
 /* ── Date cells ── */
 .date-cell { font-size: 12px; }
 .date-overdue { color: #dc2626; font-weight: 600; }

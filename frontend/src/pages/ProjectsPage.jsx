@@ -34,7 +34,7 @@ function CurrentPeriodBadge({ project }) {
   return <span className={`badge ${cls}`}>{cur.label}</span>;
 }
 
-function ProjectMobileCard({ project: p, index: i, onEdit, onDelete, onShowCm, onShowPm, onShowIssues, can }) {
+function ProjectMobileCard({ project: p, onEdit, onDelete, onShowCm, onShowPm, onShowIssues, can }) {
   const wd          = workdaysUntil(p.deadline);
   const issueLines  = (p.issues || '').trim().split('\n').filter(Boolean);
   const cmActive    = Number(p.cm_active) || 0;
@@ -111,7 +111,7 @@ function ProjectMobileCard({ project: p, index: i, onEdit, onDelete, onShowCm, o
           <span
             onClick={() => onShowCm(p)}
             title={cmTotal === 0 ? 'No CM' : `${cmTotal} CM${cmActive > 0 ? ` (${cmActive} active)` : ''}`}
-            style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:28, height:28, borderRadius:'50%', cursor:'pointer', fontSize:11, fontWeight:700, background: cmActive > 0 ? '#fee2e2' : cmTotal > 0 ? '#dcfce7' : '#f3f4f6', color: cmActive > 0 ? '#dc2626' : cmTotal > 0 ? '#16a34a' : '#9ca3af' }}
+            className={`circle-badge ${cmActive > 0 ? 'danger' : cmTotal > 0 ? 'success' : 'neutral'}`}
           >
             {cmActive > 0 ? cmActive : cmTotal > 0 ? '✓' : '—'}
           </span>
@@ -120,7 +120,7 @@ function ProjectMobileCard({ project: p, index: i, onEdit, onDelete, onShowCm, o
           <span
             onClick={() => onShowPm(p)}
             title={pmTotal === 0 ? 'No PM' : `${pmTotal} PM${pmActive > 0 ? ` (${pmActive} active)` : ''}`}
-            style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:28, height:28, borderRadius:'50%', cursor:'pointer', fontSize:11, fontWeight:700, background: pmActive > 0 ? '#fff7ed' : pmTotal > 0 ? '#dcfce7' : '#f3f4f6', color: pmActive > 0 ? '#c2410c' : pmTotal > 0 ? '#16a34a' : '#9ca3af' }}
+            className={`circle-badge ${pmActive > 0 ? 'warn' : pmTotal > 0 ? 'success' : 'neutral'}`}
           >
             {pmActive > 0 ? pmActive : pmTotal > 0 ? '✓' : '—'}
           </span>
@@ -217,7 +217,7 @@ export default function ProjectsPage({
                     <span
                       onClick={() => onShowCm(p)}
                       title={cmTotal === 0 ? 'No CM requests' : `${cmTotal} CM request(s)${cmActive > 0 ? ` — ${cmActive} active` : ''}`}
-                      style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:28, height:28, borderRadius:'50%', cursor:'pointer', fontSize:11, fontWeight:700, background: cmActive > 0 ? '#fee2e2' : cmTotal > 0 ? '#dcfce7' : '#f3f4f6', color: cmActive > 0 ? '#dc2626' : cmTotal > 0 ? '#16a34a' : '#9ca3af' }}
+                      className={`circle-badge ${cmActive > 0 ? 'danger' : cmTotal > 0 ? 'success' : 'neutral'}`}
                     >
                       {cmActive > 0 ? cmActive : cmTotal > 0 ? '✓' : '—'}
                     </span>
@@ -226,7 +226,7 @@ export default function ProjectsPage({
                     <span
                       onClick={() => onShowPm(p)}
                       title={pmTotal === 0 ? 'No PM requests' : `${pmTotal} PM request(s)${pmActive > 0 ? ` — ${pmActive} active` : ''}`}
-                      style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:28, height:28, borderRadius:'50%', cursor:'pointer', fontSize:11, fontWeight:700, background: pmActive > 0 ? '#fff7ed' : pmTotal > 0 ? '#dcfce7' : '#f3f4f6', color: pmActive > 0 ? '#c2410c' : pmTotal > 0 ? '#16a34a' : '#9ca3af' }}
+                      className={`circle-badge ${pmActive > 0 ? 'warn' : pmTotal > 0 ? 'success' : 'neutral'}`}
                     >
                       {pmActive > 0 ? pmActive : pmTotal > 0 ? '✓' : '—'}
                     </span>
@@ -257,11 +257,10 @@ export default function ProjectsPage({
 
       {/* ── Mobile cards ── */}
       <div className="mobile-only">
-        {projects.map((p, i) => (
+        {projects.map((p) => (
           <ProjectMobileCard
             key={p.id}
             project={p}
-            index={i}
             onEdit={onEdit}
             onDelete={onDelete}
             onShowCm={onShowCm}
