@@ -136,13 +136,15 @@ export default function App() {
 
   return (
     <div>
-      <Header
-        projectCount={projects.length}
-        companyCount={new Set(projects.map(p => p.company)).size}
-        onUsersClick={() => setUserModal(true)}
-      />
-      <SummaryBar projects={projects} onStatClick={f => setStatFilter(f)} />
-      <Tabs active={tab} onChange={t => setTab(t)} />
+      <div className="sticky-chrome">
+        <Header
+          projectCount={projects.length}
+          companyCount={new Set(projects.map(p => p.company)).size}
+          onUsersClick={() => setUserModal(true)}
+        />
+        <Tabs active={tab} onChange={t => setTab(t)} />
+      </div>
+      {tab === 'projects' && <SummaryBar projects={projects} onStatClick={f => setStatFilter(f)} />}
       <Toolbar
         search={search} onSearch={setSearch}
         filterStatus={filterStatus} onFilterStatus={setFilterStatus}
