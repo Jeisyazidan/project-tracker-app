@@ -4,21 +4,12 @@ import { useState } from 'react';
 import { formatDate } from '../utils/dates';
 import { createPm, updatePm, deletePm } from '../api/pm';
 import { useAuth } from '../context/AuthContext';
+import ScheduleLine from '../components/ui/ScheduleLine';
 
 function statusStyle(status) {
   if (status === 'Open')        return { bg:'#fff7ed', color:'#c2410c' };
   if (status === 'In Progress') return { bg:'#fef9c3', color:'#a16207' };
   return                               { bg:'#dcfce7', color:'#16a34a' };
-}
-
-function ScheduleLine({ date, time, label }) {
-  if (!date && !time) return null;
-  return (
-    <span style={{ display:'block', fontSize:12 }}>
-      {label && <span style={{ fontSize:10, color:'var(--text-subtle)', marginRight:4 }}>{label}</span>}
-      {formatDate(date)}{time ? <span style={{ color:'var(--text-subtle)' }}> 🕐 {time}</span> : ''}
-    </span>
-  );
 }
 
 function RequestCard({ r, canManage, onEdit, onDelete }) {
