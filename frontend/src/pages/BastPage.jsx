@@ -159,7 +159,7 @@ function ProjectCard({ project, onProjectEdit, onUpdate }) {
 
   if (!hasConfig && !periods.filter(p => p.is_custom).length) {
     return (
-      <div id={`bast-project-${project.id}`} style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:12, padding:16, marginBottom:12 }}>
+      <div id={`bast-project-${project.id}`} style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-card)', padding:16, marginBottom:12, boxShadow:'var(--shadow-sm)' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom:8 }}>
           <div><span style={{ fontWeight:700, fontSize:13, color:'var(--pid-color)' }}>{project.pid}</span><span style={{ color:'var(--text-subtle)', fontSize:12, marginLeft:8 }}>{project.company}</span></div>
           <span className={`badge badge-${({Completed:'blue','On Track':'green','Not Started':'gray'})[project.status]||'amber'}`}>{project.status}</span>
@@ -176,7 +176,7 @@ function ProjectCard({ project, onProjectEdit, onUpdate }) {
   }
 
   return (
-    <div id={`bast-project-${project.id}`} style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:12, padding:16, marginBottom:14 }}>
+    <div id={`bast-project-${project.id}`} style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-card)', padding:18, marginBottom:14, boxShadow:'var(--shadow-sm)' }}>
       <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, marginBottom:8, flexWrap:'wrap' }}>
         <div>
           <span style={{ fontWeight:700, fontSize:13, color:'var(--pid-color)' }}>{project.pid}</span>

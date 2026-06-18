@@ -34,6 +34,118 @@ function CurrentPeriodBadge({ project }) {
   return <span className={`badge ${cls}`}>{cur.label}</span>;
 }
 
+function ProjectMobileCard({ project: p, index: i, onEdit, onDelete, onShowCm, onShowPm, onShowIssues, can }) {
+  const wd          = workdaysUntil(p.deadline);
+  const issueLines  = (p.issues || '').trim().split('\n').filter(Boolean);
+  const cmActive    = Number(p.cm_active) || 0;
+  const cmTotal     = Number(p.cm_total)  || 0;
+  const pmActive    = Number(p.pm_active) || 0;
+  const pmTotal     = Number(p.pm_total)  || 0;
+
+  return (
+    <div className="mobile-project-card" id={`project-row-${p.id}`}>
+      {/* Header row */}
+      <div className="mpc-header">
+        <div>
+          <span className="pid">{p.pid}</span>
+          <span className="company" style={{ marginLeft:8 }}>{p.company}</span>
+        </div>
+        <Badge color={STATUS_BADGE[p.status] || 'gray'}>{p.status}</Badge>
+      </div>
+
+      {/* Project name */}
+      <div className="mpc-name">{p.name}</div>
+
+      {/* People */}
+      <div className="mpc-grid">
+        {p.project_manager && (
+          <div className="mpc-field">
+            <span className="mpc-label">PM</span>
+            <span className="mpc-value">{p.project_manager}</span>
+          </div>
+        )}
+        {p.operation_manager && (
+          <div className="mpc-field">
+            <span className="mpc-label">OM</span>
+            <span className="mpc-value">{p.operation_manager}</span>
+          </div>
+        )}
+        {p.project_admin && (
+          <div className="mpc-field">
+            <span className="mpc-label">Admin</span>
+            <span className="mpc-value">{p.project_admin}</span>
+          </div>
+        )}
+        <div className="mpc-field">
+          <span className="mpc-label">Handover</span>
+          <Badge color={HANDOVER_BADGE[p.handover_status] || 'gray'}>{p.handover_status || 'Not Started'}</Badge>
+        </div>
+      </div>
+
+      {/* Dates + workdays */}
+      <div className="mpc-grid">
+        <div className="mpc-field">
+          <span className="mpc-label">Contract</span>
+          <span className="mpc-value">{formatDate(p.contract_start)} → <span className={dateClass(p.deadline)}>{formatDate(p.deadline)}</span></span>
+        </div>
+        <div className="mpc-field">
+          <span className="mpc-label">Workdays left</span>
+          {p.status === 'Completed'
+            ? <Badge color="blue">Completed</Badge>
+            : wd === null
+              ? <span style={{ color:'#dc2626', fontWeight:700, fontSize:12 }}>Expired</span>
+              : <span style={{ fontSize:12, fontWeight:700, color: wd <= 30 ? '#dc2626' : wd <= 90 ? '#d97706' : '#16a34a' }}>{wd} days</span>
+          }
+        </div>
+      </div>
+
+      {/* BAST + current period */}
+      <div className="mpc-bast-row">
+        <CurrentPeriodBadge project={p} />
+        <BastProgress project={p} />
+      </div>
+
+      {/* Footer: CM / PM / Issues / Actions */}
+      <div className="mpc-footer">
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <span
+            onClick={() => onShowCm(p)}
+            title={cmTotal === 0 ? 'No CM' : `${cmTotal} CM${cmActive > 0 ? ` (${cmActive} active)` : ''}`}
+            style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:28, height:28, borderRadius:'50%', cursor:'pointer', fontSize:11, fontWeight:700, background: cmActive > 0 ? '#fee2e2' : cmTotal > 0 ? '#dcfce7' : '#f3f4f6', color: cmActive > 0 ? '#dc2626' : cmTotal > 0 ? '#16a34a' : '#9ca3af' }}
+          >
+            {cmActive > 0 ? cmActive : cmTotal > 0 ? '✓' : '—'}
+          </span>
+          <span style={{ fontSize:10, color:'var(--text-subtle)' }}>CM</span>
+
+          <span
+            onClick={() => onShowPm(p)}
+            title={pmTotal === 0 ? 'No PM' : `${pmTotal} PM${pmActive > 0 ? ` (${pmActive} active)` : ''}`}
+            style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:28, height:28, borderRadius:'50%', cursor:'pointer', fontSize:11, fontWeight:700, background: pmActive > 0 ? '#fff7ed' : pmTotal > 0 ? '#dcfce7' : '#f3f4f6', color: pmActive > 0 ? '#c2410c' : pmTotal > 0 ? '#16a34a' : '#9ca3af' }}
+          >
+            {pmActive > 0 ? pmActive : pmTotal > 0 ? '✓' : '—'}
+          </span>
+          <span style={{ fontSize:10, color:'var(--text-subtle)' }}>PM</span>
+
+          {issueLines.length > 0
+            ? <span className="issue-count has" onClick={() => onShowIssues(p)}>{issueLines.length}</span>
+            : <span className="issue-count none">0</span>
+          }
+          <span style={{ fontSize:10, color:'var(--text-subtle)' }}>Issues</span>
+        </div>
+
+        <div style={{ display:'flex', gap:6 }}>
+          {can('edit_project') && (
+            <button className="btn-sm btn-edit" onClick={() => onEdit(p)}>Edit</button>
+          )}
+          {can('delete_project') && (
+            <button className="btn-sm btn-delete" onClick={() => onDelete(p.id)}>Del</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectsPage({
   projects, onEdit, onDelete, onShowCm, onShowPm, onShowIssues, onShowStat,
 }) {
@@ -42,103 +154,123 @@ export default function ProjectsPage({
   if (!projects.length) return <EmptyState icon="📭" message="No projects found." />;
 
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>PID / Company</th>
-            <th>Project Description</th>
-            <th>Overall Status</th>
-            <th>Project Admin</th>
-            <th>Project Manager</th>
-            <th>Operation Manager</th>
-            <th>Contract Start</th>
-            <th>Contract End</th>
-            <th>Workdays Left</th>
-            <th>Handover</th>
-            <th>Current BAST Period</th>
-            <th>BAST Progress</th>
-            <th>CM</th>
-            <th>PM</th>
-            <th>Issues</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {projects.map((p, i) => {
-            const wd = workdaysUntil(p.deadline);
-            const issueLines = (p.issues || '').trim().split('\n').filter(Boolean);
-            const cmActive = Number(p.cm_active) || 0;
-            const cmTotal  = Number(p.cm_total)  || 0;
-            const pmActive = Number(p.pm_active) || 0;
-            const pmTotal  = Number(p.pm_total)  || 0;
+    <>
+      {/* ── Desktop table ── */}
+      <div className="table-wrap desktop-only">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>PID / Company</th>
+              <th>Project Description</th>
+              <th>Overall Status</th>
+              <th>Project Admin</th>
+              <th>Project Manager</th>
+              <th>Operation Manager</th>
+              <th>Contract Start</th>
+              <th>Contract End</th>
+              <th>Workdays Left</th>
+              <th>Handover</th>
+              <th>Current BAST Period</th>
+              <th>BAST Progress</th>
+              <th>CM</th>
+              <th>PM</th>
+              <th>Issues</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {projects.map((p, i) => {
+              const wd = workdaysUntil(p.deadline);
+              const issueLines = (p.issues || '').trim().split('\n').filter(Boolean);
+              const cmActive = Number(p.cm_active) || 0;
+              const cmTotal  = Number(p.cm_total)  || 0;
+              const pmActive = Number(p.pm_active) || 0;
+              const pmTotal  = Number(p.pm_total)  || 0;
 
-            return (
-              <tr key={p.id} id={`project-row-${p.id}`}>
-                <td style={{ fontSize:11, color:'var(--text-subtle)', textAlign:'center' }}>{i + 1}</td>
-                <td>
-                  <div className="pid">{p.pid}</div>
-                  <div className="company">{p.company}</div>
-                </td>
-                <td><div className="projname">{p.name}</div></td>
-                <td><Badge color={STATUS_BADGE[p.status] || 'gray'}>{p.status}</Badge></td>
-                <td><span style={{ fontSize:12, color:'var(--text)', fontWeight:500 }}>{p.project_admin || <span style={{ color:'var(--text-light)' }}>—</span>}</span></td>
-                <td><span style={{ fontSize:12, color:'var(--text)', fontWeight:500 }}>{p.project_manager || <span style={{ color:'var(--text-light)' }}>—</span>}</span></td>
-                <td><span style={{ fontSize:12, color:'var(--text)', fontWeight:500 }}>{p.operation_manager || <span style={{ color:'var(--text-light)' }}>—</span>}</span></td>
-                <td><span className="date-cell">{formatDate(p.contract_start)}</span></td>
-                <td><span className={`date-cell ${dateClass(p.deadline)}`}>{formatDate(p.deadline)}</span></td>
-                <td>
-                  {p.status === 'Completed'
-                    ? <Badge color="blue">Completed</Badge>
-                    : wd === null
-                      ? <span style={{ color:'#dc2626', fontWeight:700, fontSize:12 }}>Expired</span>
-                      : <span style={{ fontSize:12, fontWeight:700, color: wd <= 30 ? '#dc2626' : wd <= 90 ? '#d97706' : '#16a34a' }}>{wd} days</span>
-                  }
-                </td>
-                <td><Badge color={HANDOVER_BADGE[p.handover_status] || 'gray'}>{p.handover_status || 'Not Started'}</Badge></td>
-                <td><CurrentPeriodBadge project={p} /></td>
-                <td><BastProgress project={p} /></td>
-                <td>
-                  <span
-                    onClick={() => onShowCm(p)}
-                    title={cmTotal === 0 ? 'No CM requests' : `${cmTotal} CM request(s)${cmActive > 0 ? ` — ${cmActive} active` : ''}`}
-                    style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:28, height:28, borderRadius:'50%', cursor:'pointer', fontSize:11, fontWeight:700, background: cmActive > 0 ? '#fee2e2' : cmTotal > 0 ? '#dcfce7' : '#f3f4f6', color: cmActive > 0 ? '#dc2626' : cmTotal > 0 ? '#16a34a' : '#9ca3af' }}
-                  >
-                    {cmActive > 0 ? cmActive : cmTotal > 0 ? '✓' : '—'}
-                  </span>
-                </td>
-                <td>
-                  <span
-                    onClick={() => onShowPm(p)}
-                    title={pmTotal === 0 ? 'No PM requests' : `${pmTotal} PM request(s)${pmActive > 0 ? ` — ${pmActive} active` : ''}`}
-                    style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:28, height:28, borderRadius:'50%', cursor:'pointer', fontSize:11, fontWeight:700, background: pmActive > 0 ? '#fff7ed' : pmTotal > 0 ? '#dcfce7' : '#f3f4f6', color: pmActive > 0 ? '#c2410c' : pmTotal > 0 ? '#16a34a' : '#9ca3af' }}
-                  >
-                    {pmActive > 0 ? pmActive : pmTotal > 0 ? '✓' : '—'}
-                  </span>
-                </td>
-                <td>
-                  {issueLines.length > 0
-                    ? <span className="issue-count has" onClick={() => onShowIssues(p)} title="View issues">{issueLines.length}</span>
-                    : <span className="issue-count none">0</span>
-                  }
-                </td>
-                <td style={{ whiteSpace:'nowrap' }}>
-                  {can('edit_project') && (
-                    <button className="btn-sm btn-edit" onClick={() => onEdit(p)}>Edit</button>
-                  )}
-                  {can('delete_project') && (
-                    <button className="btn-sm btn-delete" style={{ marginLeft:4 }} onClick={() => onDelete(p.id)}>Del</button>
-                  )}
-                  {!can('edit_project') && !can('delete_project') && (
-                    <span style={{ color:'var(--text-light)', fontSize:11 }}>—</span>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+              return (
+                <tr key={p.id} id={`project-row-${p.id}`}>
+                  <td style={{ fontSize:11, color:'var(--text-subtle)', textAlign:'center' }}>{i + 1}</td>
+                  <td>
+                    <div className="pid">{p.pid}</div>
+                    <div className="company">{p.company}</div>
+                  </td>
+                  <td><div className="projname">{p.name}</div></td>
+                  <td><Badge color={STATUS_BADGE[p.status] || 'gray'}>{p.status}</Badge></td>
+                  <td><span style={{ fontSize:12, color:'var(--text)', fontWeight:500 }}>{p.project_admin || <span style={{ color:'var(--text-light)' }}>—</span>}</span></td>
+                  <td><span style={{ fontSize:12, color:'var(--text)', fontWeight:500 }}>{p.project_manager || <span style={{ color:'var(--text-light)' }}>—</span>}</span></td>
+                  <td><span style={{ fontSize:12, color:'var(--text)', fontWeight:500 }}>{p.operation_manager || <span style={{ color:'var(--text-light)' }}>—</span>}</span></td>
+                  <td><span className="date-cell">{formatDate(p.contract_start)}</span></td>
+                  <td><span className={`date-cell ${dateClass(p.deadline)}`}>{formatDate(p.deadline)}</span></td>
+                  <td>
+                    {p.status === 'Completed'
+                      ? <Badge color="blue">Completed</Badge>
+                      : wd === null
+                        ? <span style={{ color:'#dc2626', fontWeight:700, fontSize:12 }}>Expired</span>
+                        : <span style={{ fontSize:12, fontWeight:700, color: wd <= 30 ? '#dc2626' : wd <= 90 ? '#d97706' : '#16a34a' }}>{wd} days</span>
+                    }
+                  </td>
+                  <td><Badge color={HANDOVER_BADGE[p.handover_status] || 'gray'}>{p.handover_status || 'Not Started'}</Badge></td>
+                  <td><CurrentPeriodBadge project={p} /></td>
+                  <td><BastProgress project={p} /></td>
+                  <td>
+                    <span
+                      onClick={() => onShowCm(p)}
+                      title={cmTotal === 0 ? 'No CM requests' : `${cmTotal} CM request(s)${cmActive > 0 ? ` — ${cmActive} active` : ''}`}
+                      style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:28, height:28, borderRadius:'50%', cursor:'pointer', fontSize:11, fontWeight:700, background: cmActive > 0 ? '#fee2e2' : cmTotal > 0 ? '#dcfce7' : '#f3f4f6', color: cmActive > 0 ? '#dc2626' : cmTotal > 0 ? '#16a34a' : '#9ca3af' }}
+                    >
+                      {cmActive > 0 ? cmActive : cmTotal > 0 ? '✓' : '—'}
+                    </span>
+                  </td>
+                  <td>
+                    <span
+                      onClick={() => onShowPm(p)}
+                      title={pmTotal === 0 ? 'No PM requests' : `${pmTotal} PM request(s)${pmActive > 0 ? ` — ${pmActive} active` : ''}`}
+                      style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:28, height:28, borderRadius:'50%', cursor:'pointer', fontSize:11, fontWeight:700, background: pmActive > 0 ? '#fff7ed' : pmTotal > 0 ? '#dcfce7' : '#f3f4f6', color: pmActive > 0 ? '#c2410c' : pmTotal > 0 ? '#16a34a' : '#9ca3af' }}
+                    >
+                      {pmActive > 0 ? pmActive : pmTotal > 0 ? '✓' : '—'}
+                    </span>
+                  </td>
+                  <td>
+                    {issueLines.length > 0
+                      ? <span className="issue-count has" onClick={() => onShowIssues(p)} title="View issues">{issueLines.length}</span>
+                      : <span className="issue-count none">0</span>
+                    }
+                  </td>
+                  <td style={{ whiteSpace:'nowrap' }}>
+                    {can('edit_project') && (
+                      <button className="btn-sm btn-edit" onClick={() => onEdit(p)}>Edit</button>
+                    )}
+                    {can('delete_project') && (
+                      <button className="btn-sm btn-delete" style={{ marginLeft:4 }} onClick={() => onDelete(p.id)}>Del</button>
+                    )}
+                    {!can('edit_project') && !can('delete_project') && (
+                      <span style={{ color:'var(--text-light)', fontSize:11 }}>—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ── Mobile cards ── */}
+      <div className="mobile-only">
+        {projects.map((p, i) => (
+          <ProjectMobileCard
+            key={p.id}
+            project={p}
+            index={i}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onShowCm={onShowCm}
+            onShowPm={onShowPm}
+            onShowIssues={onShowIssues}
+            can={can}
+          />
+        ))}
+      </div>
+    </>
   );
 }

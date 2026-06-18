@@ -15,7 +15,7 @@ export default function Header({ projectCount, companyCount, onUsersClick }) {
         </div>
       </div>
       <div className="header-right">
-        <span style={{ fontSize: 11, opacity: 0.8 }}>
+        <span className="header-date" style={{ fontSize: 11, opacity: 0.8 }}>
           {new Date().toLocaleDateString('id-ID', {
             weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
           })}
