@@ -14,6 +14,9 @@ frontend/package.json~
 playwright-report/
 test-results/
 
+# Production data — never commit real data to a public repo
+database/data.sql
+
 # OS
 .DS_Store
 Thumbs.db
