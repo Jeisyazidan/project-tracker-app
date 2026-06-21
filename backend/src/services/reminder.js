@@ -1,6 +1,6 @@
 const cron    = require('node-cron');
 const db      = require('../db');
-const { sendMail } = require('./email');
+const { sendMail, lookupEmail: _lookupEmail } = require('./email');
 
 const BASE_URL = () => process.env.APP_BASE_URL || 'http://localhost:5173';
 
@@ -8,12 +8,9 @@ const BASE_URL = () => process.env.APP_BASE_URL || 'http://localhost:5173';
 
 async function lookupEmail(username) {
   if (!username) return null;
-  const { rows } = await db.query('SELECT email FROM users WHERE username = $1', [username]);
-  if (!rows[0]) {
-    console.log(`[reminder] no user found for username: "${username}"`);
-    return null;
-  }
-  return rows[0].email;
+  const email = await _lookupEmail(username);
+  if (!email) console.log(`[reminder] no user found for username: "${username}"`);
+  return email;
 }
 
 async function getLog(projectId, reminderType, referenceId) {
