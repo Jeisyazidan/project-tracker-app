@@ -12,7 +12,7 @@ const transporter = nodemailer.createTransport({
 
 async function sendMail({ to, subject, html, text }) {
   return transporter.sendMail({
-    from: process.env.MAIL_FROM || 'noreply@company.internal',
+    from: process.env.SMTP_FROM || process.env.MAIL_FROM || 'noreply@company.internal',
     to,
     subject,
     html,

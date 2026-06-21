@@ -82,7 +82,7 @@ function RequestCard({ r, canManage, onEdit, onDelete }) {
   );
 }
 
-export default function PmPage({ requests, projects, onRefresh }) {
+export default function PmPage({ requests, projects, users = [], onRefresh }) {
   const { can } = useAuth();
   const [modal, setModal] = useState({ open:false, pm:null });
 
@@ -121,7 +121,7 @@ export default function PmPage({ requests, projects, onRefresh }) {
           </div>
         )
       }
-      <PmModal open={modal.open} pm={modal.pm} projects={projects} onSave={handleSave} onClose={() => setModal({ open:false, pm:null })} />
+      <PmModal open={modal.open} pm={modal.pm} projects={projects} users={users} onSave={handleSave} onClose={() => setModal({ open:false, pm:null })} />
     </div>
   );
 }

@@ -1,10 +1,22 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Badge from '../components/ui/Badge';
 import EmptyState from '../components/ui/EmptyState';
-import { STATUS_BADGE, HANDOVER_BADGE } from '../utils/badges';
+import { STATUS_BADGE, HANDOVER_BADGE, ROLE_BADGE, ROLE_LABEL } from '../utils/badges';
 import { formatDate, dateClass, workdaysUntil } from '../utils/dates';
 import { mergePeriods, currentBastPeriod } from '../utils/bastPeriods';
 import { useAuth } from '../context/AuthContext';
+
+function UserCell({ username, userMap }) {
+  if (!username) return <span style={{ color:'var(--text-light)' }}>—</span>;
+  const user = userMap[username];
+  if (!user) return <span style={{ fontSize:12, color:'var(--text-muted)', fontStyle:'italic' }}>{username}</span>;
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+      <span style={{ fontSize:12, fontWeight:500 }}>{username}</span>
+      <Badge color={ROLE_BADGE[user.role]}>{ROLE_LABEL[user.role]}</Badge>
+    </div>
+  );
+}
 
 function BastProgress({ project }) {
   const stored  = project.bast_stored_periods || [];
@@ -34,7 +46,7 @@ function CurrentPeriodBadge({ project }) {
   return <span className={`badge ${cls}`}>{cur.label}</span>;
 }
 
-function ProjectMobileCard({ project: p, onEdit, onDelete, onShowCm, onShowPm, onShowIssues, can }) {
+function ProjectMobileCard({ project: p, userMap, onEdit, onDelete, onShowCm, onShowPm, onShowIssues, can }) {
   const wd          = workdaysUntil(p.deadline);
   const issueLines  = (p.issues || '').trim().split('\n').filter(Boolean);
   const cmActive    = Number(p.cm_active) || 0;
@@ -61,19 +73,19 @@ function ProjectMobileCard({ project: p, onEdit, onDelete, onShowCm, onShowPm, o
         {p.project_manager && (
           <div className="mpc-field">
             <span className="mpc-label">PM</span>
-            <span className="mpc-value">{p.project_manager}</span>
+            <span className="mpc-value"><UserCell username={p.project_manager} userMap={userMap} /></span>
           </div>
         )}
         {p.operation_manager && (
           <div className="mpc-field">
             <span className="mpc-label">OM</span>
-            <span className="mpc-value">{p.operation_manager}</span>
+            <span className="mpc-value"><UserCell username={p.operation_manager} userMap={userMap} /></span>
           </div>
         )}
         {p.project_admin && (
           <div className="mpc-field">
             <span className="mpc-label">Admin</span>
-            <span className="mpc-value">{p.project_admin}</span>
+            <span className="mpc-value"><UserCell username={p.project_admin} userMap={userMap} /></span>
           </div>
         )}
         <div className="mpc-field">
@@ -147,9 +159,10 @@ function ProjectMobileCard({ project: p, onEdit, onDelete, onShowCm, onShowPm, o
 }
 
 export default function ProjectsPage({
-  projects, onEdit, onDelete, onShowCm, onShowPm, onShowIssues, onShowStat,
+  projects, users = [], onEdit, onDelete, onShowCm, onShowPm, onShowIssues, onShowStat,
 }) {
   const { can } = useAuth();
+  const userMap = useMemo(() => Object.fromEntries(users.map(u => [u.username, u])), [users]);
 
   if (!projects.length) return <EmptyState icon="📭" message="No projects found." />;
 
@@ -197,9 +210,9 @@ export default function ProjectsPage({
                   </td>
                   <td><div className="projname">{p.name}</div></td>
                   <td><Badge color={STATUS_BADGE[p.status] || 'gray'}>{p.status}</Badge></td>
-                  <td><span style={{ fontSize:12, color:'var(--text)', fontWeight:500 }}>{p.project_admin || <span style={{ color:'var(--text-light)' }}>—</span>}</span></td>
-                  <td><span style={{ fontSize:12, color:'var(--text)', fontWeight:500 }}>{p.project_manager || <span style={{ color:'var(--text-light)' }}>—</span>}</span></td>
-                  <td><span style={{ fontSize:12, color:'var(--text)', fontWeight:500 }}>{p.operation_manager || <span style={{ color:'var(--text-light)' }}>—</span>}</span></td>
+                  <td><UserCell username={p.project_admin} userMap={userMap} /></td>
+                  <td><UserCell username={p.project_manager} userMap={userMap} /></td>
+                  <td><UserCell username={p.operation_manager} userMap={userMap} /></td>
                   <td><span className="date-cell">{formatDate(p.contract_start)}</span></td>
                   <td><span className={`date-cell ${dateClass(p.deadline)}`}>{formatDate(p.deadline)}</span></td>
                   <td>
@@ -261,6 +274,7 @@ export default function ProjectsPage({
           <ProjectMobileCard
             key={p.id}
             project={p}
+            userMap={userMap}
             onEdit={onEdit}
             onDelete={onDelete}
             onShowCm={onShowCm}

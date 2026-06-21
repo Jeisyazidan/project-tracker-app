@@ -8,7 +8,7 @@ const EMPTY = {
   handover_status:'Not Started', issues:'',
 };
 
-export default function ProjectModal({ open, project, onSave, onClose }) {
+export default function ProjectModal({ open, project, users = [], onSave, onClose }) {
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -103,15 +103,24 @@ export default function ProjectModal({ open, project, onSave, onClose }) {
         </div>
         <div className="form-group">
           <label>Project Admin</label>
-          <input value={form.project_admin} onChange={set('project_admin')} placeholder="e.g. Andi Pratama" />
+          <select value={form.project_admin} onChange={set('project_admin')}>
+            <option value="">— Select user —</option>
+            {users.map(u => <option key={u.id} value={u.username}>{u.username} ({u.role})</option>)}
+          </select>
         </div>
         <div className="form-group">
           <label>Project Manager</label>
-          <input value={form.project_manager} onChange={set('project_manager')} placeholder="e.g. Budi Santoso" />
+          <select value={form.project_manager} onChange={set('project_manager')}>
+            <option value="">— Select user —</option>
+            {users.map(u => <option key={u.id} value={u.username}>{u.username} ({u.role})</option>)}
+          </select>
         </div>
         <div className="form-group">
           <label>Operation Manager</label>
-          <input value={form.operation_manager} onChange={set('operation_manager')} placeholder="e.g. Rina Wijaya" />
+          <select value={form.operation_manager} onChange={set('operation_manager')}>
+            <option value="">— Select user —</option>
+            {users.map(u => <option key={u.id} value={u.username}>{u.username} ({u.role})</option>)}
+          </select>
         </div>
         <div className="form-group">
           <label>Handover Status</label>

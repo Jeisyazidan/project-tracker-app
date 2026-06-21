@@ -19,6 +19,7 @@ import Modal        from './components/ui/Modal';
 import { getProjects, createProject, updateProject, deleteProject } from './api/projects';
 import { getCmRequests } from './api/cm';
 import { getPmRequests } from './api/pm';
+import { getUsersList }  from './api/users';
 import { runExport }     from './utils/export';
 
 export default function App() {
@@ -27,6 +28,7 @@ export default function App() {
   const [projects,   setProjects]   = useState([]);
   const [cmRequests, setCmRequests] = useState([]);
   const [pmRequests, setPmRequests] = useState([]);
+  const [usersList,  setUsersList]  = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
 
   const [tab,           setTab]           = useState('projects');
@@ -47,10 +49,11 @@ export default function App() {
   const loadAll = useCallback(async () => {
     setDataLoading(true);
     try {
-      const [ps, cms, pms] = await Promise.all([getProjects(), getCmRequests(), getPmRequests()]);
+      const [ps, cms, pms, ul] = await Promise.all([getProjects(), getCmRequests(), getPmRequests(), getUsersList()]);
       setProjects(ps);
       setCmRequests(cms);
       setPmRequests(pms);
+      setUsersList(ul);
     } catch (err) {
       console.error('Load error:', err);
     } finally {
@@ -164,6 +167,7 @@ export default function App() {
             {tab === 'projects' && (
               <ProjectsPage
                 projects={filtered}
+                users={usersList}
                 onEdit={p => setProjectModal({ open:true, project:p })}
                 onDelete={handleDeleteProject}
                 onShowCm={p => setRequestModal({ open:true, type:'cm', project:p })}
@@ -178,10 +182,10 @@ export default function App() {
               <BastPage projects={filtered} onProjectEdit={p => setProjectModal({ open:true, project:p })} onRefresh={loadAll} />
             )}
             {tab === 'cm' && (
-              <CmPage requests={filteredCm} projects={projects} onRefresh={loadAll} />
+              <CmPage requests={filteredCm} projects={projects} users={usersList} onRefresh={loadAll} />
             )}
             {tab === 'pm' && (
-              <PmPage requests={filteredPm} projects={projects} onRefresh={loadAll} />
+              <PmPage requests={filteredPm} projects={projects} users={usersList} onRefresh={loadAll} />
             )}
             {tab === 'access' && <AccessControlPage />}
           </>
@@ -192,6 +196,7 @@ export default function App() {
       <ProjectModal
         open={projectModal.open}
         project={projectModal.project}
+        users={usersList}
         onSave={handleSaveProject}
         onClose={() => setProjectModal({ open:false, project:null })}
       />

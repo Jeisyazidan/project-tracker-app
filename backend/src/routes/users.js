@@ -1,8 +1,21 @@
 const router  = require('express').Router();
 const bcrypt  = require('bcrypt');
 const db      = require('../db');
-const { requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { sendWelcomeEmail } = require('../services/email');
+
+// GET /api/users/list — minimal list for dropdowns; any authenticated user
+router.get('/list', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      'SELECT id, username, role FROM users ORDER BY username'
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('GET /users/list error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 router.use(requireAdmin);
 

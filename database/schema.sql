@@ -108,9 +108,20 @@ INSERT INTO role_permissions (role, permissions) VALUES
 ('technical_writer','{"view_projects":true,"add_project":false,"edit_project":false,"delete_project":false,"view_reminders":true,"view_bast":true,"edit_bast":false,"view_cm":true,"manage_cm":false,"view_pm":true,"manage_pm":false}')
 ON CONFLICT DO NOTHING;
 
+CREATE TABLE reminder_logs (
+  id             SERIAL      PRIMARY KEY,
+  project_id     INTEGER     NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  reminder_type  VARCHAR(50) NOT NULL,   -- 'contract_end', 'bast_submit', 'cm_activity', 'pm_activity'
+  reference_id   VARCHAR(200) NOT NULL,  -- 'contract' | '{label}:{urgency}' | request id as string
+  send_count     INTEGER     NOT NULL DEFAULT 0,
+  last_sent_at   TIMESTAMPTZ,
+  CONSTRAINT reminder_logs_unique UNIQUE (project_id, reminder_type, reference_id)
+);
+
 -- Indexes
-CREATE INDEX ON bast_periods (project_id);
-CREATE INDEX ON cm_requests  (project_id);
-CREATE INDEX ON pm_requests  (project_id);
-CREATE INDEX ON cm_requests  (status);
-CREATE INDEX ON pm_requests  (status);
+CREATE INDEX ON bast_periods   (project_id);
+CREATE INDEX ON cm_requests    (project_id);
+CREATE INDEX ON pm_requests    (project_id);
+CREATE INDEX ON cm_requests    (status);
+CREATE INDEX ON pm_requests    (status);
+CREATE INDEX ON reminder_logs  (project_id);

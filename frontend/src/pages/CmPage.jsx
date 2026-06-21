@@ -82,7 +82,7 @@ function RequestCard({ r, canManage, onEdit, onDelete }) {
   );
 }
 
-export default function CmPage({ requests, projects, onRefresh }) {
+export default function CmPage({ requests, projects, users = [], onRefresh }) {
   const { can } = useAuth();
   const [modal, setModal] = useState({ open:false, cm:null });
 
@@ -121,7 +121,7 @@ export default function CmPage({ requests, projects, onRefresh }) {
           </div>
         )
       }
-      <CmModal open={modal.open} cm={modal.cm} projects={projects} onSave={handleSave} onClose={() => setModal({ open:false, cm:null })} />
+      <CmModal open={modal.open} cm={modal.cm} projects={projects} users={users} onSave={handleSave} onClose={() => setModal({ open:false, cm:null })} />
     </div>
   );
 }

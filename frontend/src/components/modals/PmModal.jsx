@@ -8,7 +8,7 @@ const EMPTY = {
   resolved_date:'', pic_utama:'', pic_support:'', notes:'',
 };
 
-export default function PmModal({ open, pm, projects, onSave, onClose }) {
+export default function PmModal({ open, pm, projects, users = [], onSave, onClose }) {
   const [form, setForm]   = useState(EMPTY);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -75,8 +75,20 @@ export default function PmModal({ open, pm, projects, onSave, onClose }) {
         </div>
         <div className="form-group full"><label>Issue Description *</label><input value={form.title} onChange={set('title')} placeholder="Brief description of the preventive maintenance request" /></div>
         <div className="form-group"><label>Resolved Date</label><input type="date" value={form.resolved_date} onChange={set('resolved_date')} /></div>
-        <div className="form-group"><label>PIC Utama</label><input value={form.pic_utama} onChange={set('pic_utama')} placeholder="e.g. Budi Santoso" /></div>
-        <div className="form-group"><label>PIC Support</label><input value={form.pic_support} onChange={set('pic_support')} placeholder="e.g. Rina Wijaya" /></div>
+        <div className="form-group">
+          <label>PIC Utama</label>
+          <select value={form.pic_utama} onChange={set('pic_utama')}>
+            <option value="">— Select user —</option>
+            {users.map(u => <option key={u.id} value={u.username}>{u.username} ({u.role})</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>PIC Support</label>
+          <select value={form.pic_support} onChange={set('pic_support')}>
+            <option value="">— Select user —</option>
+            {users.map(u => <option key={u.id} value={u.username}>{u.username} ({u.role})</option>)}
+          </select>
+        </div>
         <div className="form-group full"><label>Notes</label><textarea value={form.notes} onChange={set('notes')} placeholder="Scheduled maintenance details, action taken..." /></div>
       </div>
       {error && <div className="form-error">{error}</div>}

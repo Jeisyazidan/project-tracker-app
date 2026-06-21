@@ -2,6 +2,7 @@ require('dotenv').config();
 const express      = require('express');
 const cookieParser = require('cookie-parser');
 const cors         = require('cors');
+const { startReminderCron } = require('./services/reminder');
 
 const app = express();
 
@@ -34,6 +35,9 @@ app.use((err, req, res, _next) => {
 });
 
 const PORT = parseInt(process.env.PORT || '3001');
-app.listen(PORT, () => console.log(`API listening on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`API listening on http://localhost:${PORT}`);
+  startReminderCron();
+});
 
 module.exports = app;
