@@ -20,7 +20,8 @@ app.use('/api/bast',    require('./routes/bast'));
 app.use('/api/cm',      require('./routes/cm'));
 app.use('/api/pm',      require('./routes/pm'));
 app.use('/api/users',   require('./routes/users'));
-app.use('/api/config',  require('./routes/config'));
+app.use('/api/config',    require('./routes/config'));
+app.use('/api/reminders', require('./routes/reminders'));
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));

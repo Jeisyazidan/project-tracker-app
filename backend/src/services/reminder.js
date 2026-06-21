@@ -64,12 +64,15 @@ function todayDate() {
 // ─── contract end ────────────────────────────────────────────────────────────
 
 async function checkContractEnd() {
+  // Use <= 60 (not = 60) so a server restart never permanently misses the window.
+  // reminder_logs dedup (send_count >= 1) ensures each project is emailed once.
   const { rows } = await db.query(`
     SELECT id, pid, name, company, deadline::text,
-           project_admin, project_manager, operation_manager
+           project_admin, project_manager, operation_manager,
+           (deadline - CURRENT_DATE) AS days_remaining
     FROM projects
     WHERE deadline IS NOT NULL
-      AND deadline - CURRENT_DATE = 60
+      AND deadline - CURRENT_DATE BETWEEN 0 AND 60
   `);
 
   for (const p of rows) {
@@ -87,21 +90,22 @@ async function checkContractEnd() {
       continue;
     }
 
-    const subject = `[Contract End Reminder] ${p.name} — 60 days remaining`;
+    const days = parseInt(p.days_remaining, 10);
+    const subject = `[Contract End Reminder] ${p.name} — ${days} day(s) remaining`;
     const html = `
 <h2 style="color:#b45309">Contract End Reminder</h2>
-<p>The contract for the following project will expire in <strong>60 days</strong>.</p>
+<p>The contract for the following project will expire in <strong>${days} day(s)</strong>.</p>
 <table cellpadding="6" style="border-collapse:collapse">
   <tr><td><strong>Project</strong></td><td>${p.name}</td></tr>
   <tr><td><strong>PID</strong></td><td>${p.pid}</td></tr>
   <tr><td><strong>Company</strong></td><td>${p.company}</td></tr>
   <tr><td><strong>Contract End</strong></td><td>${p.deadline}</td></tr>
-  <tr><td><strong>Days Remaining</strong></td><td>60 days</td></tr>
+  <tr><td><strong>Days Remaining</strong></td><td>${days} day(s)</td></tr>
 </table>
 <p><a href="${BASE_URL()}">Open Project Tracker</a></p>`;
     const text =
       `Contract End Reminder\n\nProject: ${p.name} (${p.pid})\nCompany: ${p.company}\n` +
-      `Contract End: ${p.deadline}\nDays Remaining: 60 days\n\n${BASE_URL()}`;
+      `Contract End: ${p.deadline}\nDays Remaining: ${days} day(s)\n\n${BASE_URL()}`;
 
     const ok = await dispatch(emails, subject, html, text);
     if (ok) await markSent(p.id, 'contract_end', 'contract');
