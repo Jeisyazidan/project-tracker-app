@@ -60,9 +60,8 @@ function todayDate() {
 
 // ─── contract end ────────────────────────────────────────────────────────────
 
+// Three thresholds: 60d → 30d → 7d, each fires once via its own reference_id.
 async function checkContractEnd() {
-  // Use <= 60 (not = 60) so a server restart never permanently misses the window.
-  // reminder_logs dedup (send_count >= 1) ensures each project is emailed once.
   const { rows } = await db.query(`
     SELECT id, pid, name, company, deadline::text,
            project_admin, project_manager, operation_manager,
@@ -73,39 +72,52 @@ async function checkContractEnd() {
   `);
 
   for (const p of rows) {
-    const log = await getLog(p.id, 'contract_end', 'contract');
-    if (log && log.send_count >= 1) continue;
-
-    const emails = (await Promise.all([
-      lookupEmail(p.project_admin),
-      lookupEmail(p.project_manager),
-      lookupEmail(p.operation_manager),
-    ])).filter(Boolean);
-
-    if (!emails.length) {
-      console.log(`[reminder] no recipients for contract_end project ${p.id}`);
-      continue;
-    }
-
     const days = parseInt(p.days_remaining, 10);
-    const subject = `[Contract End Reminder] ${p.name} — ${days} day(s) remaining`;
-    const html = `
-<h2 style="color:#b45309">Contract End Reminder</h2>
-<p>The contract for the following project will expire in <strong>${days} day(s)</strong>.</p>
+
+    // Determine which threshold bucket applies and which ones still need sending.
+    // Buckets fire in order (60d first, then 30d, then 7d) and each sends once.
+    const thresholds = [
+      { bucket: '60d', label: '60 days',  applies: days <= 60 },
+      { bucket: '30d', label: '30 days',  applies: days <= 30 },
+      { bucket: '7d',  label: '7 days',   applies: days <= 7  },
+    ];
+
+    for (const { bucket, label, applies } of thresholds) {
+      if (!applies) continue;
+      const log = await getLog(p.id, 'contract_end', `contract:${bucket}`);
+      if (log && log.send_count >= 1) continue;
+
+      const emails = (await Promise.all([
+        lookupEmail(p.project_admin),
+        lookupEmail(p.project_manager),
+        lookupEmail(p.operation_manager),
+      ])).filter(Boolean);
+
+      if (!emails.length) {
+        console.log(`[reminder] no recipients for contract_end project ${p.id} (${bucket})`);
+        continue;
+      }
+
+      const urgencyColor = days <= 7 ? '#dc2626' : '#b45309';
+      const subject = `[Contract End Reminder] ${p.name} — ${days} day(s) remaining`;
+      const html = `
+<h2 style="color:${urgencyColor}">Contract End Reminder</h2>
+<p>The contract for the following project will expire in <strong style="color:${urgencyColor}">${days} day(s)</strong> (${label} warning).</p>
 <table cellpadding="6" style="border-collapse:collapse">
   <tr><td><strong>Project</strong></td><td>${p.name}</td></tr>
   <tr><td><strong>PID</strong></td><td>${p.pid}</td></tr>
   <tr><td><strong>Company</strong></td><td>${p.company}</td></tr>
   <tr><td><strong>Contract End</strong></td><td>${p.deadline}</td></tr>
-  <tr><td><strong>Days Remaining</strong></td><td>${days} day(s)</td></tr>
+  <tr><td><strong>Days Remaining</strong></td><td><strong style="color:${urgencyColor}">${days} day(s)</strong></td></tr>
 </table>
 <p><a href="${BASE_URL()}">Open Project Tracker</a></p>`;
-    const text =
-      `Contract End Reminder\n\nProject: ${p.name} (${p.pid})\nCompany: ${p.company}\n` +
-      `Contract End: ${p.deadline}\nDays Remaining: ${days} day(s)\n\n${BASE_URL()}`;
+      const text =
+        `Contract End Reminder (${label} warning)\n\nProject: ${p.name} (${p.pid})\nCompany: ${p.company}\n` +
+        `Contract End: ${p.deadline}\nDays Remaining: ${days} day(s)\n\n${BASE_URL()}`;
 
-    const ok = await dispatch(emails, subject, html, text);
-    if (ok) await markSent(p.id, 'contract_end', 'contract');
+      const ok = await dispatch(emails, subject, html, text);
+      if (ok) await markSent(p.id, 'contract_end', `contract:${bucket}`);
+    }
   }
 }
 

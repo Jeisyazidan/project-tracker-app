@@ -22,7 +22,10 @@ const TYPE_COLORS = {
 };
 
 function formatRefId(type, ref) {
-  if (type === 'contract_end') return '60-day warning';
+  if (type === 'contract_end') {
+    const bucketMap = { '60d': '60-day warning', '30d': '30-day warning', '7d': '7-day warning', 'contract': '60-day warning' };
+    return bucketMap[ref.replace('contract:', '')] || ref;
+  }
   if (type === 'bast_submit') {
     const [label, urgency] = ref.split(':');
     const urgencyMap = { '30d':'30d warning', '7d':'7d warning', overdue:'overdue' };
