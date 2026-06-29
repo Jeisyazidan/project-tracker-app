@@ -13,13 +13,13 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '../backend/.env') });
 const { Pool } = require('pg');
-const fs       = require('fs');
+const fs = require('fs');
 
 const pool = new Pool({
-  host:     process.env.DB_HOST,
-  port:     parseInt(process.env.DB_PORT || '5432'),
+  host: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME,
-  user:     process.env.DB_USER,
+  user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
 });
 
@@ -29,12 +29,12 @@ function orNull(v) {
 }
 
 async function run() {
-  const raw  = fs.readFileSync('/tmp/supabase_data.json', 'utf8');
+  const raw = fs.readFileSync('/tmp/supabase_data.json', 'utf8');
   const rows = JSON.parse(raw);
   const data = Object.fromEntries(rows.map(r => [r.key, r.value]));
 
-  const projects        = data.projects        || [];
-  const authUsers       = data.auth_users      || [];
+  const projects = data.projects || [];
+  const authUsers = data.auth_users || [];
   const rolePermissions = data.role_permissions || {};
 
   const client = await pool.connect();
@@ -130,7 +130,7 @@ async function run() {
             projectId,
             ct.label,
             orNull(ct.startDate || ct.start),
-            orNull(ct.endDate   || ct.end),
+            orNull(ct.endDate || ct.end),
             ct.steps || Array(8).fill(false),
             orNull(ct.submitDeadline),
             i,
