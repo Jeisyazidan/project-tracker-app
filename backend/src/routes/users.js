@@ -23,7 +23,7 @@ router.use(requireAdmin);
 router.get('/', async (req, res) => {
   try {
     const { rows } = await db.query(
-      'SELECT id, username, email, role, created_at FROM users ORDER BY id'
+      'SELECT id, username, email, phone, role, created_at FROM users ORDER BY id'
     );
     res.json(rows);
   } catch (err) {
@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
 
 // POST /api/users
 router.post('/', async (req, res) => {
-  const { username, email, password, role } = req.body;
+  const { username, email, password, role, phone } = req.body;
   if (!username || !email || !password) {
     return res.status(400).json({ error: 'username, email, and password are required' });
   }
@@ -48,13 +48,12 @@ router.post('/', async (req, res) => {
   try {
     const hash = await bcrypt.hash(password, 10);
     const { rows } = await db.query(
-      `INSERT INTO users (username, email, password_hash, role)
-       VALUES ($1,$2,$3,$4)
-       RETURNING id, username, email, role, created_at`,
-      [username.trim(), email.trim().toLowerCase(), hash, role || 'pm']
+      `INSERT INTO users (username, email, phone, password_hash, role)
+       VALUES ($1,$2,$3,$4,$5)
+       RETURNING id, username, email, phone, role, created_at`,
+      [username.trim(), email.trim().toLowerCase(), phone?.trim() || null, hash, role || 'pm']
     );
-    // Fire-and-forget welcome email
-    sendWelcomeEmail(rows[0]).catch(e => console.warn('Welcome email failed:', e.message));
+    sendWelcomeEmail(rows[0]).catch(e => console.warn('Welcome WA failed:', e.message));
     res.status(201).json(rows[0]);
   } catch (err) {
     if (err.code === '23505') {
@@ -78,6 +77,22 @@ router.delete('/:id', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('DELETE /users/:id error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/users/:id/phone — set or update WhatsApp phone number
+router.put('/:id/phone', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const { phone } = req.body;
+  try {
+    const { rowCount } = await db.query(
+      'UPDATE users SET phone=$1 WHERE id=$2', [phone?.trim() || null, id]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('PUT /users/:id/phone error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
