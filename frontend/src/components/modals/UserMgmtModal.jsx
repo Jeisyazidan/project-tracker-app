@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Modal from '../ui/Modal';
 import Badge from '../ui/Badge';
-import { getUsers, createUser, deleteUser, updatePhone } from '../../api/users';
+import { getUsers, createUser, deleteUser, updatePhone, updateEmail } from '../../api/users';
 import { ROLE_BADGE, ROLE_LABEL } from '../../utils/badges';
 import { useAuth } from '../../context/AuthContext';
 
@@ -14,12 +14,13 @@ export default function UserMgmtModal({ open, onClose }) {
   const [error, setError]       = useState('');
   const [saving, setSaving]     = useState(false);
   const [editPhone, setEditPhone] = useState(null); // { id, phone }
+  const [editEmail, setEditEmail] = useState(null); // { id, email }
 
   const load = useCallback(async () => {
     try { setUsers(await getUsers()); } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => { if (open) { load(); setForm(EMPTY_FORM); setError(''); setEditPhone(null); } }, [open, load]);
+  useEffect(() => { if (open) { load(); setForm(EMPTY_FORM); setError(''); setEditPhone(null); setEditEmail(null); } }, [open, load]);
 
   const set = key => e => setForm(f => ({ ...f, [key]: e.target.value }));
 

@@ -97,6 +97,26 @@ router.put('/:id/phone', async (req, res) => {
   }
 });
 
+// PUT /api/users/:id/email — update email address
+router.put('/:id/email', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const { email } = req.body;
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Valid email address is required' });
+  }
+  try {
+    const { rowCount } = await db.query(
+      'UPDATE users SET email=$1 WHERE id=$2', [email.trim().toLowerCase(), id]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'That email is already taken' });
+    console.error('PUT /users/:id/email error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // PUT /api/users/:id/password — change own password or admin changes any
 router.put('/:id/password', async (req, res) => {
   const id = parseInt(req.params.id, 10);

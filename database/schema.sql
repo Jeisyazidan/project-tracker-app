@@ -9,6 +9,7 @@ CREATE TABLE users (
   password_hash VARCHAR(255) NOT NULL,
   role        VARCHAR(50)  NOT NULL DEFAULT 'pm'
                 CHECK (role IN ('admin','pm','om','system_engineer','dba','technical_writer')),
+  phone       VARCHAR(20),
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
