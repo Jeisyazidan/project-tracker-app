@@ -5,6 +5,11 @@ node_modules/
 backend/.env
 .env
 .env.local
+/env
+
+# Local scratch — extraction/download artifacts, not source
+/repo.zip
+/temp_extract/
 
 # Build output
 frontend/dist/
