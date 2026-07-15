@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import EmptyState from '../components/ui/EmptyState';
 import Modal from '../components/ui/Modal';
 import MonthCalendar from '../components/dashboard/MonthCalendar';
-import { getMyDashboard } from '../api/dashboard';
+import { getMyDashboard, getAllDashboard } from '../api/dashboard';
 import { formatDate } from '../utils/dates';
+import { ROLE_LABEL } from '../utils/badges';
+import { useAuth } from '../context/AuthContext';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -19,6 +21,8 @@ function pushItem(itemsByDate, iso, meta, label, detail) {
   (itemsByDate[iso] ||= []).push({ ...meta, label, detail });
 }
 
+// Personal ("My Dashboard") calendar — data.cm/pm items carry a single
+// role:'utama'|'support' string (the logged-in user's own relation).
 function buildCalendarItems(data) {
   const itemsByDate = {};
   if (!data) return itemsByDate;
@@ -42,25 +46,121 @@ function buildCalendarItems(data) {
   return itemsByDate;
 }
 
+function assigneeSummary(assignees) {
+  if (!assignees || !assignees.length) return 'Unassigned';
+  return assignees.map(a => `${a.relation}: ${a.username}`).join(', ');
+}
+
+// Admin "All Users" calendar — every item may have several assignees, so
+// the summary is appended to the detail line instead of a single PIC label.
+function buildAllCalendarItems(data) {
+  const itemsByDate = {};
+  if (!data) return itemsByDate;
+
+  (data.cm || []).forEach(c => pushItem(itemsByDate, c.start_date, TYPE_META.cm,
+    c.title || c.project_name,
+    `${c.pid} — ${c.project_name}${c.start_time ? ' · ' + c.start_time : ''} · ${c.status} · ${assigneeSummary(c.assignees)}`));
+
+  (data.pm || []).forEach(r => pushItem(itemsByDate, r.start_date, TYPE_META.pm,
+    r.title || r.project_name,
+    `${r.pid} — ${r.project_name}${r.start_time ? ' · ' + r.start_time : ''} · ${r.status} · ${assigneeSummary(r.assignees)}`));
+
+  (data.bastDeadlines || []).forEach(b => pushItem(itemsByDate, b.submitDeadline, TYPE_META.bast,
+    `${b.label} — ${b.projectName}`,
+    `${b.pid} — ${b.projectName} · ${b.stepsDone}/${b.totalSteps} steps · ${assigneeSummary(b.assignees)}`));
+
+  (data.contractDeadlines || []).forEach(p => pushItem(itemsByDate, p.deadline, TYPE_META.contract,
+    `Contract End — ${p.project_name}`,
+    `${p.pid} — ${p.project_name} · ${assigneeSummary(p.assignees)}`));
+
+  return itemsByDate;
+}
+
+// Admin "All Users" calendar, sorted by name or role — splits each item
+// into one pill per assignee (an item can belong to more than one person)
+// and orders the pills within each day by that assignee's name/role,
+// instead of switching away from the calendar grid.
+function buildAllCalendarItemsSorted(data, sortBy) {
+  const itemsByDate = {};
+  if (!data) return itemsByDate;
+
+  const rows = [];
+  const addRows = (items, meta, labelFn, detailFn, dateFn) => {
+    items.forEach(item => {
+      (item.assignees || []).forEach(a => {
+        rows.push({
+          date: dateFn(item),
+          meta,
+          label: `${labelFn(item)} — ${a.username}`,
+          detail: `${detailFn(item)} · ${a.relation}`,
+          assignee: a,
+        });
+      });
+    });
+  };
+
+  addRows(data.cm || [], TYPE_META.cm,
+    c => c.title || c.project_name,
+    c => `${c.pid} — ${c.project_name}${c.start_time ? ' · ' + c.start_time : ''} · ${c.status}`,
+    c => c.start_date);
+  addRows(data.pm || [], TYPE_META.pm,
+    r => r.title || r.project_name,
+    r => `${r.pid} — ${r.project_name}${r.start_time ? ' · ' + r.start_time : ''} · ${r.status}`,
+    r => r.start_date);
+  addRows(data.bastDeadlines || [], TYPE_META.bast,
+    b => `${b.label} — ${b.projectName}`,
+    b => `${b.pid} — ${b.projectName} · ${b.stepsDone}/${b.totalSteps} steps`,
+    b => b.submitDeadline);
+  addRows(data.contractDeadlines || [], TYPE_META.contract,
+    p => `Contract End — ${p.project_name}`,
+    p => `${p.pid} — ${p.project_name}`,
+    p => p.deadline);
+
+  const sortKey = row => sortBy === 'role'
+    ? `${ROLE_LABEL[row.assignee.role] || row.assignee.role || ''} ${row.assignee.username || ''}`
+    : (row.assignee.username || '');
+  rows.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+
+  rows.forEach(row => pushItem(itemsByDate, row.date, row.meta, row.label, row.detail));
+  return itemsByDate;
+}
+
 export default function DashboardPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
     return { month: d.getMonth() + 1, year: d.getFullYear() };
   });
+  const [viewMode, setViewMode] = useState('me'); // 'me' | 'all' (admin only)
+  const [sortBy, setSortBy]     = useState('date'); // 'date' | 'name' | 'role' (viewMode 'all' only)
   const [data, setData]         = useState(null);
   const [loading, setLoading]   = useState(true);
   const [dayModal, setDayModal] = useState({ open:false, iso:'', items:[] });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    try { setData(await getMyDashboard(cursor.month, cursor.year)); }
-    catch { setData(null); }
+    try {
+      const fetcher = (isAdmin && viewMode === 'all') ? getAllDashboard : getMyDashboard;
+      setData(await fetcher(cursor.month, cursor.year));
+    } catch { setData(null); }
     finally { setLoading(false); }
-  }, [cursor]);
+  }, [cursor, viewMode, isAdmin]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const itemsByDate = useMemo(() => buildCalendarItems(data), [data]);
+  const showingAll = isAdmin && viewMode === 'all';
+
+  // Sort-by-name/role only applies to the "All Users" view — snap back to
+  // the default date ordering when leaving it.
+  useEffect(() => { if (!showingAll) setSortBy('date'); }, [showingAll]);
+
+  const itemsByDate = useMemo(() => {
+    if (!showingAll) return buildCalendarItems(data);
+    return sortBy === 'date' ? buildAllCalendarItems(data) : buildAllCalendarItemsSorted(data, sortBy);
+  }, [data, showingAll, sortBy]);
+
   const totalItems = useMemo(() => (
     data ? data.cm.length + data.pm.length + data.bastDeadlines.length + data.contractDeadlines.length : 0
   ), [data]);
@@ -78,6 +178,29 @@ export default function DashboardPage() {
         </div>
         <button className="btn btn-secondary" style={{ fontSize:12, padding:'4px 10px' }} onClick={goNext}>▶</button>
         <button className="btn btn-secondary" style={{ fontSize:12, padding:'4px 10px' }} onClick={goToday}>Today</button>
+
+        {isAdmin && (
+          <select
+            value={viewMode}
+            onChange={e => setViewMode(e.target.value)}
+            style={{ fontSize:12, padding:'4px 8px' }}
+          >
+            <option value="me">My Schedule</option>
+            <option value="all">All Users</option>
+          </select>
+        )}
+        {showingAll && (
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            style={{ fontSize:12, padding:'4px 8px' }}
+          >
+            <option value="date">Sort: Date</option>
+            <option value="name">Sort: Name</option>
+            <option value="role">Sort: Role</option>
+          </select>
+        )}
+
         <div style={{ flex:1 }} />
         {!loading && data && (
           <div style={{ fontSize:12, color:'var(--text-muted)' }}>{totalItems} item{totalItems === 1 ? '' : 's'} this month</div>
@@ -87,14 +210,16 @@ export default function DashboardPage() {
       {loading ? (
         <div style={{ fontSize:13, color:'var(--text-muted)', padding:'24px 0', textAlign:'center' }}>Loading…</div>
       ) : !data ? (
-        <EmptyState icon="⚠️" message="Couldn't load your dashboard." />
+        <EmptyState icon="⚠️" message="Couldn't load the dashboard." />
       ) : (
         <>
           <MonthCalendar
             year={cursor.year} month={cursor.month} itemsByDate={itemsByDate}
             onDayClick={(iso, items) => setDayModal({ open:true, iso, items })}
           />
-          {totalItems === 0 && <EmptyState icon="✅" message="Nothing assigned to you this month." />}
+          {totalItems === 0 && (
+            <EmptyState icon="✅" message={showingAll ? 'Nothing assigned to anyone this month.' : 'Nothing assigned to you this month.'} />
+          )}
         </>
       )}
 

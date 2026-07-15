@@ -149,17 +149,19 @@ export default function App() {
         <Tabs active={tab} onChange={t => setTab(t)} />
       </div>
       {tab === 'projects' && <SummaryBar projects={projects} onStatClick={f => setStatFilter(f)} />}
-      <Toolbar
-        search={search} onSearch={setSearch}
-        filterStatus={filterStatus} onFilterStatus={setFilterStatus}
-        filterCompany={filterCompany} onFilterCompany={setFilterCompany}
-        filterAdmin={filterAdmin} onFilterAdmin={setFilterAdmin}
-        filterPM={filterPM} onFilterPM={setFilterPM}
-        filterOM={filterOM} onFilterOM={setFilterOM}
-        companies={companies} admins={admins} pms={pms} oms={oms}
-        onExport={() => setExportModal(true)}
-        onAddProject={() => setProjectModal({ open:true, project:null })}
-      />
+      {tab !== 'dashboard' && (
+        <Toolbar
+          search={search} onSearch={setSearch}
+          filterStatus={filterStatus} onFilterStatus={setFilterStatus}
+          filterCompany={filterCompany} onFilterCompany={setFilterCompany}
+          filterAdmin={filterAdmin} onFilterAdmin={setFilterAdmin}
+          filterPM={filterPM} onFilterPM={setFilterPM}
+          filterOM={filterOM} onFilterOM={setFilterOM}
+          companies={companies} admins={admins} pms={pms} oms={oms}
+          onExport={() => setExportModal(true)}
+          onAddProject={() => setProjectModal({ open:true, project:null })}
+        />
+      )}
       <div className="content">
         {dataLoading ? (
           <div className="empty-state"><div className="icon" style={{ fontSize:28 }}>⏳</div><div>Loading data…</div></div>
