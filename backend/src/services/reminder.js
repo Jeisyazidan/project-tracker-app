@@ -1,14 +1,14 @@
 const cron    = require('node-cron');
 const db      = require('../db');
-const { sendMail, lookupEmail: _lookupEmail } = require('./email');
+const { sendMail, lookupEmailById } = require('./email');
 const { renderEmail, formatSchedule, BAST_STEPS, BILLING_FREQ_LABELS, checklistHtml, checklistText } = require('./emailTemplate');
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-async function lookupEmail(username) {
-  if (!username) return null;
-  const email = await _lookupEmail(username);
-  if (!email) console.log(`[reminder] no user found for username: "${username}"`);
+async function lookupEmail(userId) {
+  if (!userId) return null;
+  const email = await lookupEmailById(userId);
+  if (!email) console.log(`[reminder] no user found for id: "${userId}"`);
   return email;
 }
 
@@ -63,7 +63,7 @@ function todayDate() {
 async function checkContractEnd() {
   const { rows } = await db.query(`
     SELECT id, pid, name, company, deadline::text, billing_freq, handover_status,
-           project_admin, project_manager, operation_manager,
+           project_admin_id, project_manager_id, operation_manager_id,
            (deadline - CURRENT_DATE) AS days_remaining
     FROM projects
     WHERE deadline IS NOT NULL
@@ -87,9 +87,9 @@ async function checkContractEnd() {
       if (log && log.send_count >= 1) continue;
 
       const emails = (await Promise.all([
-        lookupEmail(p.project_admin),
-        lookupEmail(p.project_manager),
-        lookupEmail(p.operation_manager),
+        lookupEmail(p.project_admin_id),
+        lookupEmail(p.project_manager_id),
+        lookupEmail(p.operation_manager_id),
       ])).filter(Boolean);
 
       if (!emails.length) {
@@ -131,7 +131,7 @@ async function checkBastSubmit() {
   const { rows } = await db.query(`
     SELECT
       bp.project_id, bp.label, bp.submit_deadline::text, bp.steps,
-      p.pid, p.name, p.company, p.project_admin, p.project_manager,
+      p.pid, p.name, p.company, p.project_admin_id, p.project_manager_id,
       (bp.submit_deadline - CURRENT_DATE) AS days_remaining
     FROM bast_periods bp
     JOIN projects p ON p.id = bp.project_id
@@ -153,8 +153,8 @@ async function checkBastSubmit() {
     if (log && log.send_count >= 1) continue;
 
     const emails = (await Promise.all([
-      lookupEmail(period.project_admin),
-      lookupEmail(period.project_manager),
+      lookupEmail(period.project_admin_id),
+      lookupEmail(period.project_manager_id),
     ])).filter(Boolean);
 
     if (!emails.length) {
@@ -208,7 +208,7 @@ async function checkActivityReminders(type) {
     SELECT
       r.id, r.project_id, r.title, r.status,
       r.start_date::text, r.end_date::text, r.start_time::text, r.end_time::text,
-      r.pic_utama, r.pic_support,
+      r.pic_utama_id, r.pic_support_id,
       p.pid, p.name, p.company,
       (r.start_date - CURRENT_DATE) AS days_until
     FROM ${table} r
@@ -231,8 +231,8 @@ async function checkActivityReminders(type) {
     }
 
     const emails = (await Promise.all([
-      lookupEmail(req.pic_utama),
-      lookupEmail(req.pic_support),
+      lookupEmail(req.pic_utama_id),
+      lookupEmail(req.pic_support_id),
     ])).filter(Boolean);
 
     if (!emails.length) {

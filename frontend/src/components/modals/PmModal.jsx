@@ -5,7 +5,7 @@ import { todayISO, nowTime } from '../../utils/dates';
 const EMPTY = {
   project_id:'', title:'', start_date:'', start_time:'',
   end_date:'', end_time:'', status:'Open',
-  resolved_date:'', pic_utama:'', pic_support:'', notes:'',
+  resolved_date:'', pic_utama_id:'', pic_support_id:'', notes:'',
 };
 
 export default function PmModal({ open, pm, projects, users = [], onSave, onClose }) {
@@ -25,8 +25,8 @@ export default function PmModal({ open, pm, projects, users = [], onSave, onClos
         end_time:      pm.end_time || '',
         status:        pm.status || 'Open',
         resolved_date: pm.resolved_date || '',
-        pic_utama:     pm.pic_utama || '',
-        pic_support:   pm.pic_support || '',
+        pic_utama_id:   pm.pic_utama_id   ? String(pm.pic_utama_id)   : '',
+        pic_support_id: pm.pic_support_id ? String(pm.pic_support_id) : '',
         notes:         pm.notes || '',
       });
     } else {
@@ -45,7 +45,12 @@ export default function PmModal({ open, pm, projects, users = [], onSave, onClos
     setSaving(true);
     setError('');
     try {
-      await onSave({ ...form, project_id: parseInt(form.project_id, 10) });
+      await onSave({
+        ...form,
+        project_id: parseInt(form.project_id, 10),
+        pic_utama_id: form.pic_utama_id ? parseInt(form.pic_utama_id, 10) : null,
+        pic_support_id: form.pic_support_id ? parseInt(form.pic_support_id, 10) : null,
+      });
       onClose();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save');
@@ -77,16 +82,16 @@ export default function PmModal({ open, pm, projects, users = [], onSave, onClos
         <div className="form-group"><label>Resolved Date</label><input type="date" value={form.resolved_date} onChange={set('resolved_date')} /></div>
         <div className="form-group">
           <label>PIC Utama</label>
-          <select value={form.pic_utama} onChange={set('pic_utama')}>
+          <select value={form.pic_utama_id} onChange={set('pic_utama_id')}>
             <option value="">— Select user —</option>
-            {users.map(u => <option key={u.id} value={u.username}>{u.username} ({u.role})</option>)}
+            {users.map(u => <option key={u.id} value={u.id}>{u.username} ({u.role})</option>)}
           </select>
         </div>
         <div className="form-group">
           <label>PIC Support</label>
-          <select value={form.pic_support} onChange={set('pic_support')}>
+          <select value={form.pic_support_id} onChange={set('pic_support_id')}>
             <option value="">— Select user —</option>
-            {users.map(u => <option key={u.id} value={u.username}>{u.username} ({u.role})</option>)}
+            {users.map(u => <option key={u.id} value={u.id}>{u.username} ({u.role})</option>)}
           </select>
         </div>
         <div className="form-group full"><label>Notes</label><textarea value={form.notes} onChange={set('notes')} placeholder="Scheduled maintenance details, action taken..." /></div>

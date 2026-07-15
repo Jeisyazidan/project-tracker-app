@@ -1,6 +1,7 @@
 import { useAuth } from '../../context/AuthContext';
 
 const TAB_LIST = [
+  { key: 'dashboard', label: '📅 My Dashboard'                          },
   { key: 'projects',  label: 'Project Overview',  perm: 'view_projects'  },
   { key: 'reminders', label: '🔔 Reminders',       perm: 'view_reminders' },
   { key: 'bast',      label: '📄 BAST Billing',    perm: 'view_bast'      },

@@ -74,16 +74,17 @@ async function sendWelcomeEmail(user) {
   return sendMail({ to: user.email, subject: '👋 Welcome to Project Tracker', html, text });
 }
 
-async function lookupEmail(username) {
-  if (!username) return null;
-  const { rows } = await db.query('SELECT email FROM users WHERE username = $1', [username]);
+async function lookupEmailById(userId) {
+  if (!userId) return null;
+  const { rows } = await db.query('SELECT email FROM users WHERE id = $1', [userId]);
   return rows[0]?.email || null;
 }
 
 // Send assignment/reassignment notification for a CM or PM activity.
-// pics: array of usernames to notify (already filtered to newly-assigned only).
-async function sendAssignmentEmail({ type, isNew, title, project, startDate, startTime, endDate, endTime, status, picUtama, picSupport, notes, pics }) {
-  if (!pics.length) return;
+// recipients: array of email addresses to notify (already resolved and
+// filtered to newly-assigned only by the caller).
+async function sendAssignmentEmail({ type, isNew, title, project, startDate, startTime, endDate, endTime, status, picUtamaName, picSupportName, notes, recipients }) {
+  if (!recipients || !recipients.length) return;
 
   const typeLabel = type === 'cm' ? 'Change Management' : 'Problem Management';
   const shortLabel = type.toUpperCase();
@@ -106,19 +107,18 @@ async function sendAssignmentEmail({ type, isNew, title, project, startDate, sta
       ['Activity', title],
       ['Schedule', formatSchedule(startDate, startTime, endDate, endTime)],
       ['Status', status],
-      ['Primary PIC', picUtama],
-      ['Support PIC', picSupport],
+      ['Primary PIC', picUtamaName],
+      ['Support PIC', picSupportName],
       ['Notes', notes],
     ],
     actionItems: ['Review the assignment details', 'Contact the team if you need clarification', 'Update progress in Project Tracker'],
   });
 
-  const emails = (await Promise.all(pics.map(lookupEmail))).filter(Boolean);
-  for (const email of [...new Set(emails)]) {
+  for (const email of [...new Set(recipients)]) {
     sendMail({ to: email, subject, html, text })
       .then(() => console.log(`[email] assignment sent → ${email}`))
       .catch(err => console.warn(`[email] assignment failed → ${email}:`, err.message));
   }
 }
 
-module.exports = { sendMail, sendWelcomeEmail, lookupEmail, sendAssignmentEmail };
+module.exports = { sendMail, sendWelcomeEmail, lookupEmailById, sendAssignmentEmail };

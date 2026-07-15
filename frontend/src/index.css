@@ -322,6 +322,63 @@ body.dark .reminder-row.upcoming { background: rgba(59,130,246,0.1); border-colo
   padding-top: 10px; border-top: 1px solid var(--border2);
 }
 
+/* ── Month calendar (Dashboard) ── */
+.month-calendar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  padding: 12px;
+  overflow-x: auto;
+}
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(110px, 1fr));
+  gap: 6px;
+}
+.calendar-weekdays {
+  margin-bottom: 6px;
+}
+.calendar-weekday {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+  padding: 4px 0;
+}
+.calendar-cell {
+  min-height: 92px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: default;
+}
+.calendar-cell:has(.calendar-pill) { cursor: pointer; }
+.calendar-cell.out-of-month { opacity: 0.4; }
+.calendar-cell.today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.calendar-cell-date { font-size: 11px; font-weight: 700; color: var(--text-muted); }
+.calendar-cell-items { display: flex; flex-direction: column; gap: 3px; }
+.calendar-pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calendar-pill-more {
+  background: var(--border2);
+  color: var(--text-subtle);
+  font-weight: 500;
+}
+
 /* ── @media mobile breakpoint ── */
 @media (max-width: 768px) {
   .desktop-only { display: none !important; }
@@ -358,6 +415,10 @@ body.dark .reminder-row.upcoming { background: rgba(59,130,246,0.1); border-colo
 
   /* Modal full-width on small screens */
   .modal { padding: 16px; }
+
+  /* Month calendar — allow horizontal scroll instead of squeezing cells */
+  .calendar-grid { grid-template-columns: repeat(7, minmax(90px, 1fr)); }
+  .calendar-cell { min-height: 76px; }
 }
 
 @media (max-width: 480px) {

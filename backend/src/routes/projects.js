@@ -13,12 +13,18 @@ router.get('/', requirePermission('view_projects'), async (req, res) => {
         p.*,
         p.contract_start::text  AS contract_start,
         p.deadline::text        AS deadline,
+        pa.username  AS project_admin,
+        pm2.username AS project_manager,
+        om.username  AS operation_manager,
         COALESCE(cm.total, 0)   AS cm_total,
         COALESCE(cm.active, 0)  AS cm_active,
         COALESCE(pmr.total, 0)  AS pm_total,
         COALESCE(pmr.active, 0) AS pm_active,
         COALESCE(bp.periods, '[]'::json) AS bast_stored_periods
       FROM projects p
+      LEFT JOIN users pa  ON pa.id  = p.project_admin_id
+      LEFT JOIN users pm2 ON pm2.id = p.project_manager_id
+      LEFT JOIN users om  ON om.id  = p.operation_manager_id
       LEFT JOIN (
         SELECT project_id,
                COUNT(*) AS total,
@@ -54,27 +60,38 @@ router.get('/', requirePermission('view_projects'), async (req, res) => {
 router.post('/', requirePermission('add_project'), async (req, res) => {
   const {
     pid, company, name, status, contract_start, deadline,
-    billing_freq, project_admin, project_manager, operation_manager,
+    billing_freq, project_admin_id, project_manager_id, operation_manager_id,
     handover_status, issues,
   } = req.body;
   if (!pid || !company || !name) {
     return res.status(400).json({ error: 'PID, company, and name are required' });
   }
+  const projectAdminId     = project_admin_id     ? parseInt(project_admin_id, 10)     : null;
+  const projectManagerId   = project_manager_id   ? parseInt(project_manager_id, 10)   : null;
+  const operationManagerId = operation_manager_id ? parseInt(operation_manager_id, 10) : null;
   try {
     const { rows } = await db.query(
-      `INSERT INTO projects
-         (pid,company,name,status,contract_start,deadline,billing_freq,
-          project_admin,project_manager,operation_manager,handover_status,issues)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       RETURNING *, contract_start::text, deadline::text`,
+      `WITH ins AS (
+         INSERT INTO projects
+           (pid,company,name,status,contract_start,deadline,billing_freq,
+            project_admin_id,project_manager_id,operation_manager_id,handover_status,issues)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         RETURNING *
+       )
+       SELECT ins.*, ins.contract_start::text, ins.deadline::text,
+              pa.username AS project_admin, pm2.username AS project_manager, om.username AS operation_manager
+       FROM ins
+       LEFT JOIN users pa  ON pa.id  = ins.project_admin_id
+       LEFT JOIN users pm2 ON pm2.id = ins.project_manager_id
+       LEFT JOIN users om  ON om.id  = ins.operation_manager_id`,
       [pid, company, name,
        status || 'On Track',
        contract_start || null,
        deadline || null,
        billing_freq || null,
-       project_admin || null,
-       project_manager || null,
-       operation_manager || null,
+       projectAdminId,
+       projectManagerId,
+       operationManagerId,
        handover_status || 'Not Started',
        issues || null]
     );
@@ -90,21 +107,32 @@ router.put('/:id', requirePermission('edit_project'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const {
     pid, company, name, status, contract_start, deadline,
-    billing_freq, project_admin, project_manager, operation_manager,
+    billing_freq, project_admin_id, project_manager_id, operation_manager_id,
     handover_status, issues,
   } = req.body;
+  const projectAdminId     = project_admin_id     ? parseInt(project_admin_id, 10)     : null;
+  const projectManagerId   = project_manager_id   ? parseInt(project_manager_id, 10)   : null;
+  const operationManagerId = operation_manager_id ? parseInt(operation_manager_id, 10) : null;
   try {
     const { rows } = await db.query(
-      `UPDATE projects SET
-         pid=$1, company=$2, name=$3, status=$4,
-         contract_start=$5, deadline=$6, billing_freq=$7,
-         project_admin=$8, project_manager=$9, operation_manager=$10,
-         handover_status=$11, issues=$12, updated_at=NOW()
-       WHERE id=$13
-       RETURNING *, contract_start::text, deadline::text`,
+      `WITH upd AS (
+         UPDATE projects SET
+           pid=$1, company=$2, name=$3, status=$4,
+           contract_start=$5, deadline=$6, billing_freq=$7,
+           project_admin_id=$8, project_manager_id=$9, operation_manager_id=$10,
+           handover_status=$11, issues=$12, updated_at=NOW()
+         WHERE id=$13
+         RETURNING *
+       )
+       SELECT upd.*, upd.contract_start::text, upd.deadline::text,
+              pa.username AS project_admin, pm2.username AS project_manager, om.username AS operation_manager
+       FROM upd
+       LEFT JOIN users pa  ON pa.id  = upd.project_admin_id
+       LEFT JOIN users pm2 ON pm2.id = upd.project_manager_id
+       LEFT JOIN users om  ON om.id  = upd.operation_manager_id`,
       [pid, company, name, status,
        contract_start || null, deadline || null, billing_freq || null,
-       project_admin || null, project_manager || null, operation_manager || null,
+       projectAdminId, projectManagerId, operationManagerId,
        handover_status || 'Not Started', issues || null,
        id]
     );

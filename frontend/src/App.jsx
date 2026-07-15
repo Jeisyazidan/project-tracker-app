@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth }  from './context/AuthContext';
 import LoginPage    from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
 import ProjectsPage from './pages/ProjectsPage';
 import RemindersPage from './pages/RemindersPage';
 import BastPage      from './pages/BastPage';
@@ -31,7 +32,7 @@ export default function App() {
   const [usersList,  setUsersList]  = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
 
-  const [tab,           setTab]           = useState('projects');
+  const [tab,           setTab]           = useState('dashboard');
   const [search,        setSearch]        = useState('');
   const [filterStatus,  setFilterStatus]  = useState('');
   const [filterCompany, setFilterCompany] = useState('');
@@ -164,6 +165,7 @@ export default function App() {
           <div className="empty-state"><div className="icon" style={{ fontSize:28 }}>⏳</div><div>Loading data…</div></div>
         ) : (
           <>
+            {tab === 'dashboard' && <DashboardPage />}
             {tab === 'projects' && (
               <ProjectsPage
                 projects={filtered}

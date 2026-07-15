@@ -53,3 +53,18 @@ export function todayISO() {
 export function nowTime() {
   return new Date().toTimeString().slice(0, 5);
 }
+
+// Returns a 42-cell (6x7) month grid starting on Sunday, including
+// leading/trailing days from adjacent months. month is 1-12.
+export function getMonthGrid(year, month) {
+  const first = new Date(year, month - 1, 1);
+  const gridStart = new Date(year, month - 1, 1 - first.getDay());
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(gridStart);
+    d.setDate(gridStart.getDate() + i);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    cells.push({ iso, day: d.getDate(), inMonth: d.getMonth() === month - 1 });
+  }
+  return cells;
+}

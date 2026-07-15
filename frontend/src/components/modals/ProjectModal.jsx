@@ -4,7 +4,7 @@ import Modal from '../ui/Modal';
 const EMPTY = {
   pid:'', company:'', name:'', status:'On Track',
   contract_start:'', deadline:'', billing_freq:'',
-  project_admin:'', project_manager:'', operation_manager:'',
+  project_admin_id:'', project_manager_id:'', operation_manager_id:'',
   handover_status:'Not Started', issues:'',
 };
 
@@ -24,9 +24,9 @@ export default function ProjectModal({ open, project, users = [], onSave, onClos
             contract_start:    project.contract_start || '',
             deadline:          project.deadline || '',
             billing_freq:      project.billing_freq || '',
-            project_admin:     project.project_admin || '',
-            project_manager:   project.project_manager || '',
-            operation_manager: project.operation_manager || '',
+            project_admin_id:     project.project_admin_id     ? String(project.project_admin_id)     : '',
+            project_manager_id:   project.project_manager_id   ? String(project.project_manager_id)   : '',
+            operation_manager_id: project.operation_manager_id ? String(project.operation_manager_id) : '',
             handover_status:   project.handover_status || 'Not Started',
             issues:            project.issues || '',
           }
@@ -46,7 +46,12 @@ export default function ProjectModal({ open, project, users = [], onSave, onClos
     setSaving(true);
     setError('');
     try {
-      await onSave(form);
+      await onSave({
+        ...form,
+        project_admin_id: form.project_admin_id ? parseInt(form.project_admin_id, 10) : null,
+        project_manager_id: form.project_manager_id ? parseInt(form.project_manager_id, 10) : null,
+        operation_manager_id: form.operation_manager_id ? parseInt(form.operation_manager_id, 10) : null,
+      });
       onClose();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save');
@@ -103,23 +108,23 @@ export default function ProjectModal({ open, project, users = [], onSave, onClos
         </div>
         <div className="form-group">
           <label>Project Admin</label>
-          <select value={form.project_admin} onChange={set('project_admin')}>
+          <select value={form.project_admin_id} onChange={set('project_admin_id')}>
             <option value="">— Select user —</option>
-            {users.map(u => <option key={u.id} value={u.username}>{u.username} ({u.role})</option>)}
+            {users.map(u => <option key={u.id} value={u.id}>{u.username} ({u.role})</option>)}
           </select>
         </div>
         <div className="form-group">
           <label>Project Manager</label>
-          <select value={form.project_manager} onChange={set('project_manager')}>
+          <select value={form.project_manager_id} onChange={set('project_manager_id')}>
             <option value="">— Select user —</option>
-            {users.map(u => <option key={u.id} value={u.username}>{u.username} ({u.role})</option>)}
+            {users.map(u => <option key={u.id} value={u.id}>{u.username} ({u.role})</option>)}
           </select>
         </div>
         <div className="form-group">
           <label>Operation Manager</label>
-          <select value={form.operation_manager} onChange={set('operation_manager')}>
+          <select value={form.operation_manager_id} onChange={set('operation_manager_id')}>
             <option value="">— Select user —</option>
-            {users.map(u => <option key={u.id} value={u.username}>{u.username} ({u.role})</option>)}
+            {users.map(u => <option key={u.id} value={u.id}>{u.username} ({u.role})</option>)}
           </select>
         </div>
         <div className="form-group">
