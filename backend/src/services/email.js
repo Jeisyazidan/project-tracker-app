@@ -1,5 +1,7 @@
 const nodemailer = require('nodemailer');
 const db = require('../db');
+const { getRolePermissions } = require('../middleware/rbac');
+const { renderEmail, esc, formatSchedule, bulletListHtml, bulletListText } = require('./emailTemplate');
 
 const transporter = nodemailer.createTransport({
   host:   process.env.SMTP_HOST || 'localhost',
@@ -21,14 +23,55 @@ async function sendMail({ to, subject, html, text }) {
   });
 }
 
+function formatRole(role) {
+  return String(role || '')
+    .split('_')
+    .filter(Boolean)
+    .map(w => w[0].toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+// Maps each notification category to the RBAC permission that makes it relevant.
+const NOTIFICATION_ITEMS = [
+  { permKey: 'view_projects', label: 'Contract Expiration Reminder' },
+  { permKey: 'view_bast',     label: 'BAST Reminder' },
+  { permKey: 'manage_cm',     label: 'CM Assignment' },
+  { permKey: 'manage_pm',     label: 'PM Assignment' },
+  { permKey: 'view_cm',       label: 'CM Activity Reminder' },
+  { permKey: 'view_pm',       label: 'PM Activity Reminder' },
+];
+
+// getRolePermissions returns null for admin (bypasses all checks) — treat as all granted.
+function relevantNotifications(perms) {
+  return NOTIFICATION_ITEMS.filter(item => !perms || perms[item.permKey]).map(i => i.label);
+}
+
 async function sendWelcomeEmail(user) {
-  return sendMail({
-    to: user.email,
-    subject: 'Welcome to Project Tracker',
-    html: `<p>Hi <strong>${user.username}</strong>,</p>
-           <p>Your account has been created. Role: <strong>${user.role}</strong>.</p>`,
-    text: `Hi ${user.username}, your account has been created. Role: ${user.role}.`,
+  const roleLabel = formatRole(user.role);
+  const perms = await getRolePermissions(user.role);
+  const notifications = relevantNotifications(perms);
+
+  const { html, text } = renderEmail({
+    tone: 'blue',
+    heading: 'Welcome to Project Tracker',
+    badge: { label: 'Account Created' },
+    greetingHtml: `Hello <strong>${esc(user.username)}</strong>,`,
+    introHtml: [
+      `I'm <strong>DEBORA</strong> (Digital Engineering Bot for Operational Reminder &amp; Automation), your digital assistant for Project Tracker.`,
+      `Your account has been successfully created and you're ready to get started.`,
+    ],
+    infoCardTitle: 'Account Information',
+    infoFields: [
+      ['Username', user.username],
+      ['Role', roleLabel],
+      ['Email', user.email],
+    ],
+    extraHtml: [bulletListHtml("You'll Receive Notifications For", notifications, '🔔')],
+    extraText: [bulletListText("You'll Receive Notifications For", notifications)],
+    actionItems: ['Log in to your account', 'Verify your profile details', 'Start collaborating with your team'],
   });
+
+  return sendMail({ to: user.email, subject: '👋 Welcome to Project Tracker', html, text });
 }
 
 async function lookupEmail(username) {
@@ -39,37 +82,36 @@ async function lookupEmail(username) {
 
 // Send assignment/reassignment notification for a CM or PM activity.
 // pics: array of usernames to notify (already filtered to newly-assigned only).
-async function sendAssignmentEmail({ type, isNew, title, project, startDate, startTime, endDate, endTime, notes, pics }) {
+async function sendAssignmentEmail({ type, isNew, title, project, startDate, startTime, endDate, endTime, status, picUtama, picSupport, notes, pics }) {
   if (!pics.length) return;
 
-  const typeLabel = type === 'cm' ? 'CM (Corrective Maintenance)' : 'PM (Preventive Maintenance)';
-  const actionLine = isNew ? 'You have been assigned to a new activity.' : 'You have been reassigned to an existing activity.';
-  const subject = `[${type.toUpperCase()} Assignment] ${title} — ${project.name} (${project.pid})`;
+  const typeLabel = type === 'cm' ? 'Change Management' : 'Problem Management';
+  const shortLabel = type.toUpperCase();
+  const introLine = isNew
+    ? `You've been assigned to a new ${typeLabel.toLowerCase()} activity. Here are the details:`
+    : `You've been reassigned to an existing ${typeLabel.toLowerCase()} activity. Here are the details:`;
+  const subject = `${type === 'cm' ? '🔄' : '🚨'} [${shortLabel} Assignment] ${title} — ${project.name} (${project.pid})`;
 
-  const startStr = [startDate, startTime].filter(Boolean).join(' ');
-  const endStr   = [endDate,   endTime  ].filter(Boolean).join(' ');
-
-  const html = `
-<h2 style="color:#1d4ed8">${typeLabel} Assignment</h2>
-<p>${actionLine}</p>
-<table cellpadding="6" style="border-collapse:collapse">
-  <tr><td><strong>Activity</strong></td><td>${title}</td></tr>
-  <tr><td><strong>Project</strong></td><td>${project.name}</td></tr>
-  <tr><td><strong>PID</strong></td><td>${project.pid}</td></tr>
-  <tr><td><strong>Company</strong></td><td>${project.company}</td></tr>
-  ${startStr ? `<tr><td><strong>Start</strong></td><td>${startStr}</td></tr>` : ''}
-  ${endStr   ? `<tr><td><strong>End</strong></td><td>${endStr}</td></tr>`   : ''}
-  ${notes    ? `<tr><td><strong>Notes</strong></td><td>${notes}</td></tr>`  : ''}
-</table>
-<p><a href="${process.env.APP_BASE_URL || 'http://localhost:5173'}">Open Project Tracker</a></p>`;
-
-  const text =
-    `${typeLabel} Assignment\n\n${actionLine}\n\n` +
-    `Activity: ${title}\nProject: ${project.name} (${project.pid})\nCompany: ${project.company}\n` +
-    (startStr ? `Start: ${startStr}\n` : '') +
-    (endStr   ? `End: ${endStr}\n`   : '') +
-    (notes    ? `Notes: ${notes}\n`  : '') +
-    `\n${process.env.APP_BASE_URL || 'http://localhost:5173'}`;
+  const { html, text } = renderEmail({
+    tone: 'blue',
+    heading: `${typeLabel} Assignment`,
+    badge: { label: isNew ? 'New Assignment' : 'Reassigned' },
+    greetingHtml: `Hi there,`,
+    introHtml: [
+      `Congratulations — ${esc(introLine)}`,
+    ],
+    infoCardTitle: 'Activity Information',
+    infoFields: [
+      ['Project', project.name],
+      ['Activity', title],
+      ['Schedule', formatSchedule(startDate, startTime, endDate, endTime)],
+      ['Status', status],
+      ['Primary PIC', picUtama],
+      ['Support PIC', picSupport],
+      ['Notes', notes],
+    ],
+    actionItems: ['Review the assignment details', 'Contact the team if you need clarification', 'Update progress in Project Tracker'],
+  });
 
   const emails = (await Promise.all(pics.map(lookupEmail))).filter(Boolean);
   for (const email of [...new Set(emails)]) {

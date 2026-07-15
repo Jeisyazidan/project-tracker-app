@@ -58,7 +58,8 @@ router.post('/', requirePermission('manage_cm'), async (req, res) => {
     const pics = [pic_utama, pic_support].filter(Boolean);
     if (pics.length && prows[0]) {
       sendAssignmentEmail({ type:'cm', isNew:true, title, project:prows[0],
-        startDate:start_date, startTime:start_time, endDate:end_date, endTime:end_time, notes, pics });
+        startDate:start_date, startTime:start_time, endDate:end_date, endTime:end_time,
+        status: status || 'Open', picUtama: pic_utama, picSupport: pic_support, notes, pics });
     }
   } catch (err) {
     console.error('POST /cm error:', err);
@@ -106,7 +107,8 @@ router.put('/:id', requirePermission('manage_cm'), async (req, res) => {
     ].filter(Boolean);
     if (newlyAssigned.length && prows[0]) {
       sendAssignmentEmail({ type:'cm', isNew:false, title, project:prows[0],
-        startDate:start_date, startTime:start_time, endDate:end_date, endTime:end_time, notes, pics:newlyAssigned });
+        startDate:start_date, startTime:start_time, endDate:end_date, endTime:end_time,
+        status: status || 'Open', picUtama: pic_utama, picSupport: pic_support, notes, pics:newlyAssigned });
     }
   } catch (err) {
     console.error('PUT /cm/:id error:', err);

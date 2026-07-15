@@ -1,8 +1,7 @@
 const cron    = require('node-cron');
 const db      = require('../db');
 const { sendMail, lookupEmail: _lookupEmail } = require('./email');
-
-const BASE_URL = () => process.env.APP_BASE_URL || 'http://localhost:5173';
+const { renderEmail, formatSchedule, BAST_STEPS, BILLING_FREQ_LABELS, checklistHtml, checklistText } = require('./emailTemplate');
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -63,7 +62,7 @@ function todayDate() {
 // Three thresholds: 60d → 30d → 7d, each fires once via its own reference_id.
 async function checkContractEnd() {
   const { rows } = await db.query(`
-    SELECT id, pid, name, company, deadline::text,
+    SELECT id, pid, name, company, deadline::text, billing_freq, handover_status,
            project_admin, project_manager, operation_manager,
            (deadline - CURRENT_DATE) AS days_remaining
     FROM projects
@@ -77,12 +76,12 @@ async function checkContractEnd() {
     // Determine which threshold bucket applies and which ones still need sending.
     // Buckets fire in order (60d first, then 30d, then 7d) and each sends once.
     const thresholds = [
-      { bucket: '60d', label: '60 days',  applies: days <= 60 },
-      { bucket: '30d', label: '30 days',  applies: days <= 30 },
-      { bucket: '7d',  label: '7 days',   applies: days <= 7  },
+      { bucket: '60d', tone: 'blue',   applies: days <= 60 },
+      { bucket: '30d', tone: 'orange', applies: days <= 30 },
+      { bucket: '7d',  tone: 'red',    applies: days <= 7  },
     ];
 
-    for (const { bucket, label, applies } of thresholds) {
+    for (const { bucket, tone, applies } of thresholds) {
       if (!applies) continue;
       const log = await getLog(p.id, 'contract_end', `contract:${bucket}`);
       if (log && log.send_count >= 1) continue;
@@ -98,22 +97,27 @@ async function checkContractEnd() {
         continue;
       }
 
-      const urgencyColor = days <= 7 ? '#dc2626' : '#b45309';
-      const subject = `[Contract End Reminder] ${p.name} — ${days} day(s) remaining`;
-      const html = `
-<h2 style="color:${urgencyColor}">Contract End Reminder</h2>
-<p>The contract for the following project will expire in <strong style="color:${urgencyColor}">${days} day(s)</strong> (${label} warning).</p>
-<table cellpadding="6" style="border-collapse:collapse">
-  <tr><td><strong>Project</strong></td><td>${p.name}</td></tr>
-  <tr><td><strong>PID</strong></td><td>${p.pid}</td></tr>
-  <tr><td><strong>Company</strong></td><td>${p.company}</td></tr>
-  <tr><td><strong>Contract End</strong></td><td>${p.deadline}</td></tr>
-  <tr><td><strong>Days Remaining</strong></td><td><strong style="color:${urgencyColor}">${days} day(s)</strong></td></tr>
-</table>
-<p><a href="${BASE_URL()}">Open Project Tracker</a></p>`;
-      const text =
-        `Contract End Reminder (${label} warning)\n\nProject: ${p.name} (${p.pid})\nCompany: ${p.company}\n` +
-        `Contract End: ${p.deadline}\nDays Remaining: ${days} day(s)\n\n${BASE_URL()}`;
+      const subject = `📅 [Contract Expiration Reminder] ${p.name} — ${days} day(s) remaining`;
+      const { html, text } = renderEmail({
+        tone,
+        heading: 'Contract Expiration Reminder',
+        badge: { label: `${days} Day(s) Remaining` },
+        greetingHtml: 'Hello,',
+        introHtml: [
+          `Just a friendly heads-up — the contract for <strong>${p.name}</strong> is approaching its end date. Please review the details below and coordinate next steps with your team.`,
+        ],
+        infoCardTitle: 'Project Information',
+        infoFields: [
+          ['PID', p.pid],
+          ['Project', p.name],
+          ['Company', p.company],
+          ['Contract End Date', p.deadline],
+          ['Remaining Days', `${days} day(s)`],
+          ['Billing Frequency', BILLING_FREQ_LABELS[p.billing_freq] || p.billing_freq],
+          ['Current Handover Status', p.handover_status],
+        ],
+        actionItems: ['Review contract details', 'Coordinate with stakeholders', 'Prepare renewal or project closure plan'],
+      });
 
       const ok = await dispatch(emails, subject, html, text);
       if (ok) await markSent(p.id, 'contract_end', `contract:${bucket}`);
@@ -161,24 +165,31 @@ async function checkBastSubmit() {
     const statusText = days < 0
       ? `${Math.abs(days)} days overdue`
       : `${days} day(s) remaining`;
+    const tone = days < 0 ? 'red' : 'orange';
+    const checklistItems = BAST_STEPS.map((label, i) => ({ label, done: !!period.steps[i] }));
 
-    const subject = `[BAST Submit Reminder] ${period.name} — ${period.label} (${statusText})`;
-    const html = `
-<h2 style="color:#b45309">BAST Submit Deadline Reminder</h2>
-<p>A BAST submit deadline requires your attention.</p>
-<table cellpadding="6" style="border-collapse:collapse">
-  <tr><td><strong>Project</strong></td><td>${period.name}</td></tr>
-  <tr><td><strong>PID</strong></td><td>${period.pid}</td></tr>
-  <tr><td><strong>Company</strong></td><td>${period.company}</td></tr>
-  <tr><td><strong>Billing Period</strong></td><td>${period.label}</td></tr>
-  <tr><td><strong>Submit Deadline</strong></td><td>${period.submit_deadline}</td></tr>
-  <tr><td><strong>Status</strong></td><td><strong style="color:${days < 0 ? '#dc2626' : '#b45309'}">${statusText}</strong></td></tr>
-</table>
-<p><a href="${BASE_URL()}">Open Project Tracker</a></p>`;
-    const text =
-      `BAST Submit Deadline Reminder\n\nProject: ${period.name} (${period.pid})\n` +
-      `Company: ${period.company}\nBilling Period: ${period.label}\n` +
-      `Submit Deadline: ${period.submit_deadline}\nStatus: ${statusText}\n\n${BASE_URL()}`;
+    const subject = `📄 [BAST Reminder] ${period.name} — ${period.label} (${statusText})`;
+    const { html, text } = renderEmail({
+      tone,
+      heading: 'BAST Submission Reminder',
+      badge: { label: statusText },
+      greetingHtml: 'Hello,',
+      introHtml: [
+        `A BAST submission deadline requires your attention. Here's the current status:`,
+      ],
+      infoCardTitle: 'Project Information',
+      infoFields: [
+        ['PID', period.pid],
+        ['Project', period.name],
+        ['Company', period.company],
+        ['Period', period.label],
+        ['Submit Deadline', period.submit_deadline],
+        ['Remaining Days', statusText],
+      ],
+      extraHtml: [checklistHtml(checklistItems)],
+      extraText: [checklistText(checklistItems)],
+      actionItems: ['Complete the remaining checklist items', 'Submit before the deadline'],
+    });
 
     const ok = await dispatch(emails, subject, html, text);
     if (ok) await markSent(period.project_id, 'bast_submit', referenceId);
@@ -190,11 +201,13 @@ async function checkBastSubmit() {
 async function checkActivityReminders(type) {
   const table        = type === 'cm' ? 'cm_requests' : 'pm_requests';
   const reminderType = type === 'cm' ? 'cm_activity' : 'pm_activity';
-  const typeLabel    = type === 'cm' ? 'CM Activity' : 'PM Activity';
+  const typeLabel    = type === 'cm' ? 'Change Management' : 'Problem Management';
+  const shortLabel   = type.toUpperCase();
 
   const { rows } = await db.query(`
     SELECT
-      r.id, r.project_id, r.title, r.start_date::text,
+      r.id, r.project_id, r.title, r.status,
+      r.start_date::text, r.end_date::text, r.start_time::text, r.end_time::text,
       r.pic_utama, r.pic_support,
       p.pid, p.name, p.company,
       (r.start_date - CURRENT_DATE) AS days_until
@@ -228,22 +241,24 @@ async function checkActivityReminders(type) {
     }
 
     const days = parseInt(req.days_until, 10);
-    const subject = `[${typeLabel} Reminder] ${req.title} — starts in ${days} day(s)`;
-    const html = `
-<h2 style="color:#1d4ed8">${typeLabel} Reminder</h2>
-<p>An activity is scheduled to start in <strong>${days} day(s)</strong>.</p>
-<table cellpadding="6" style="border-collapse:collapse">
-  <tr><td><strong>Activity</strong></td><td>${req.title}</td></tr>
-  <tr><td><strong>Project</strong></td><td>${req.name}</td></tr>
-  <tr><td><strong>PID</strong></td><td>${req.pid}</td></tr>
-  <tr><td><strong>Company</strong></td><td>${req.company}</td></tr>
-  <tr><td><strong>Start Date</strong></td><td>${req.start_date}</td></tr>
-  <tr><td><strong>Days Until Start</strong></td><td>${days} day(s)</td></tr>
-</table>
-<p><a href="${BASE_URL()}">Open Project Tracker</a></p>`;
-    const text =
-      `${typeLabel} Reminder\n\nActivity: ${req.title}\nProject: ${req.name} (${req.pid})\n` +
-      `Company: ${req.company}\nStart Date: ${req.start_date}\nDays Until Start: ${days} day(s)\n\n${BASE_URL()}`;
+    const subject = `⏰ [${shortLabel} Reminder] ${req.title} — starts in ${days} day(s)`;
+    const { html, text } = renderEmail({
+      tone: 'orange',
+      heading: `${typeLabel} Reminder`,
+      badge: { label: `Starts in ${days} Day(s)` },
+      greetingHtml: 'Hello,',
+      introHtml: [
+        `An activity is scheduled to start in <strong>${days} day(s)</strong>. Here are the details:`,
+      ],
+      infoCardTitle: 'Activity Information',
+      infoFields: [
+        ['Project', req.name],
+        ['Activity', req.title],
+        ['Schedule', formatSchedule(req.start_date, req.start_time, req.end_date, req.end_time)],
+        ['Status', req.status],
+      ],
+      actionItems: ['Prepare for implementation', 'Confirm readiness with your team', 'Update progress in Project Tracker'],
+    });
 
     const ok = await dispatch(emails, subject, html, text);
     if (ok) await markSent(req.project_id, reminderType, referenceId);
