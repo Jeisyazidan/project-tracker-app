@@ -2,6 +2,7 @@ const router = require('express').Router();
 const db     = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const { mergePeriods } = require('../utils/bastPeriods');
+const { picJoinClauses } = require('../utils/picSql');
 
 router.use(requireAuth);
 
@@ -30,10 +31,10 @@ router.get('/me', async (req, res) => {
         SELECT c.id, c.title, c.start_date::text, c.start_time::text,
                c.end_date::text, c.end_time::text, c.status,
                p.id AS project_id, p.pid, p.company, p.name AS project_name,
-               CASE WHEN c.pic_utama_id = $1 THEN 'utama' ELSE 'support' END AS role
+               (SELECT array_agg(relation) FROM cm_request_pics WHERE request_id = c.id AND user_id = $1) AS roles
         FROM cm_requests c
         JOIN projects p ON p.id = c.project_id
-        WHERE (c.pic_utama_id = $1 OR c.pic_support_id = $1)
+        WHERE EXISTS (SELECT 1 FROM cm_request_pics cp WHERE cp.request_id = c.id AND cp.user_id = $1)
           AND c.start_date BETWEEN $2 AND $3
         ORDER BY c.start_date, c.start_time
       `, [userId, monthStart, monthEnd]),
@@ -41,10 +42,10 @@ router.get('/me', async (req, res) => {
         SELECT r.id, r.title, r.start_date::text, r.start_time::text,
                r.end_date::text, r.end_time::text, r.status,
                p.id AS project_id, p.pid, p.company, p.name AS project_name,
-               CASE WHEN r.pic_utama_id = $1 THEN 'utama' ELSE 'support' END AS role
+               (SELECT array_agg(relation) FROM pm_request_pics WHERE request_id = r.id AND user_id = $1) AS roles
         FROM pm_requests r
         JOIN projects p ON p.id = r.project_id
-        WHERE (r.pic_utama_id = $1 OR r.pic_support_id = $1)
+        WHERE EXISTS (SELECT 1 FROM pm_request_pics rp WHERE rp.request_id = r.id AND rp.user_id = $1)
           AND r.start_date BETWEEN $2 AND $3
         ORDER BY r.start_date, r.start_time
       `, [userId, monthStart, monthEnd]),
@@ -128,28 +129,26 @@ router.get('/all', async (req, res) => {
         SELECT c.id, c.title, c.start_date::text, c.start_time::text,
                c.end_date::text, c.end_time::text, c.status,
                p.id AS project_id, p.pid, p.company, p.name AS project_name,
-               pu.id AS pu_id, pu.username AS pu_username, pu.role AS pu_role,
-               ps.id AS ps_id, ps.username AS ps_username, ps.role AS ps_role
+               COALESCE(pic_utama_agg.users, '[]'::json)   AS pic_utama_users,
+               COALESCE(pic_support_agg.users, '[]'::json) AS pic_support_users
         FROM cm_requests c
         JOIN projects p ON p.id = c.project_id
-        LEFT JOIN users pu ON pu.id = c.pic_utama_id
-        LEFT JOIN users ps ON ps.id = c.pic_support_id
+        ${picJoinClauses('cm_request_pics', 'c')}
         WHERE c.start_date BETWEEN $1 AND $2
-          AND (c.pic_utama_id IS NOT NULL OR c.pic_support_id IS NOT NULL)
+          AND (pic_utama_agg.users IS NOT NULL OR pic_support_agg.users IS NOT NULL)
         ORDER BY c.start_date, c.start_time
       `, [monthStart, monthEnd]),
       db.query(`
         SELECT r.id, r.title, r.start_date::text, r.start_time::text,
                r.end_date::text, r.end_time::text, r.status,
                p.id AS project_id, p.pid, p.company, p.name AS project_name,
-               pu.id AS pu_id, pu.username AS pu_username, pu.role AS pu_role,
-               ps.id AS ps_id, ps.username AS ps_username, ps.role AS ps_role
+               COALESCE(pic_utama_agg.users, '[]'::json)   AS pic_utama_users,
+               COALESCE(pic_support_agg.users, '[]'::json) AS pic_support_users
         FROM pm_requests r
         JOIN projects p ON p.id = r.project_id
-        LEFT JOIN users pu ON pu.id = r.pic_utama_id
-        LEFT JOIN users ps ON ps.id = r.pic_support_id
+        ${picJoinClauses('pm_request_pics', 'r')}
         WHERE r.start_date BETWEEN $1 AND $2
-          AND (r.pic_utama_id IS NOT NULL OR r.pic_support_id IS NOT NULL)
+          AND (pic_utama_agg.users IS NOT NULL OR pic_support_agg.users IS NOT NULL)
         ORDER BY r.start_date, r.start_time
       `, [monthStart, monthEnd]),
       db.query(`
@@ -189,20 +188,18 @@ router.get('/all', async (req, res) => {
     ]);
 
     const asAssignee = (id, username, role, relation) => id ? { id, username, role, relation } : null;
+    const picAssignees = row => [
+      ...(row.pic_utama_users || []).map(u => ({ ...u, relation: 'PIC Utama' })),
+      ...(row.pic_support_users || []).map(u => ({ ...u, relation: 'PIC Support' })),
+    ];
 
-    const cm = cmRes.rows.map(({ pu_id, pu_username, pu_role, ps_id, ps_username, ps_role, ...rest }) => ({
+    const cm = cmRes.rows.map(({ pic_utama_users, pic_support_users, ...rest }) => ({
       ...rest,
-      assignees: [
-        asAssignee(pu_id, pu_username, pu_role, 'PIC Utama'),
-        asAssignee(ps_id, ps_username, ps_role, 'PIC Support'),
-      ].filter(Boolean),
+      assignees: picAssignees({ pic_utama_users, pic_support_users }),
     }));
-    const pm = pmRes.rows.map(({ pu_id, pu_username, pu_role, ps_id, ps_username, ps_role, ...rest }) => ({
+    const pm = pmRes.rows.map(({ pic_utama_users, pic_support_users, ...rest }) => ({
       ...rest,
-      assignees: [
-        asAssignee(pu_id, pu_username, pu_role, 'PIC Utama'),
-        asAssignee(ps_id, ps_username, ps_role, 'PIC Support'),
-      ].filter(Boolean),
+      assignees: picAssignees({ pic_utama_users, pic_support_users }),
     }));
 
     const bastDeadlines = [];

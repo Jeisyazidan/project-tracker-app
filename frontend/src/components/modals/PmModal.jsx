@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import Modal from '../ui/Modal';
+import MultiUserSelect from '../ui/MultiUserSelect';
 import { todayISO, nowTime } from '../../utils/dates';
 
 const EMPTY = {
   project_id:'', title:'', start_date:'', start_time:'',
   end_date:'', end_time:'', status:'Open',
-  resolved_date:'', pic_utama_id:'', pic_support_id:'', notes:'',
+  resolved_date:'', pic_utama_ids:[], pic_support_ids:[], notes:'',
 };
 
 export default function PmModal({ open, pm, projects, users = [], onSave, onClose }) {
@@ -25,8 +26,8 @@ export default function PmModal({ open, pm, projects, users = [], onSave, onClos
         end_time:      pm.end_time || '',
         status:        pm.status || 'Open',
         resolved_date: pm.resolved_date || '',
-        pic_utama_id:   pm.pic_utama_id   ? String(pm.pic_utama_id)   : '',
-        pic_support_id: pm.pic_support_id ? String(pm.pic_support_id) : '',
+        pic_utama_ids:   (pm.pic_utama_users   || []).map(u => u.id),
+        pic_support_ids: (pm.pic_support_users || []).map(u => u.id),
         notes:         pm.notes || '',
       });
     } else {
@@ -48,8 +49,6 @@ export default function PmModal({ open, pm, projects, users = [], onSave, onClos
       await onSave({
         ...form,
         project_id: parseInt(form.project_id, 10),
-        pic_utama_id: form.pic_utama_id ? parseInt(form.pic_utama_id, 10) : null,
-        pic_support_id: form.pic_support_id ? parseInt(form.pic_support_id, 10) : null,
       });
       onClose();
     } catch (err) {
@@ -82,17 +81,13 @@ export default function PmModal({ open, pm, projects, users = [], onSave, onClos
         <div className="form-group"><label>Resolved Date</label><input type="date" value={form.resolved_date} onChange={set('resolved_date')} /></div>
         <div className="form-group">
           <label>PIC Utama</label>
-          <select value={form.pic_utama_id} onChange={set('pic_utama_id')}>
-            <option value="">— Select user —</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.username} ({u.role})</option>)}
-          </select>
+          <MultiUserSelect users={users} selectedIds={form.pic_utama_ids}
+            onChange={ids => setForm(f => ({ ...f, pic_utama_ids: ids }))} />
         </div>
         <div className="form-group">
           <label>PIC Support</label>
-          <select value={form.pic_support_id} onChange={set('pic_support_id')}>
-            <option value="">— Select user —</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.username} ({u.role})</option>)}
-          </select>
+          <MultiUserSelect users={users} selectedIds={form.pic_support_ids}
+            onChange={ids => setForm(f => ({ ...f, pic_support_ids: ids }))} />
         </div>
         <div className="form-group full"><label>Notes</label><textarea value={form.notes} onChange={set('notes')} placeholder="Scheduled maintenance details, action taken..." /></div>
       </div>

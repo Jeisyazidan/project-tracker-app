@@ -21,19 +21,24 @@ function pushItem(itemsByDate, iso, meta, label, detail) {
   (itemsByDate[iso] ||= []).push({ ...meta, label, detail });
 }
 
-// Personal ("My Dashboard") calendar — data.cm/pm items carry a single
-// role:'utama'|'support' string (the logged-in user's own relation).
+// Personal ("My Dashboard") calendar — data.cm/pm items carry a
+// roles:('utama'|'support')[] array (the logged-in user can now be both
+// PIC Utama and PIC Support on the same activity).
+function rolesLabel(roles) {
+  return (roles || []).map(r => r === 'utama' ? 'Utama' : 'Support').join(' & ') || 'PIC';
+}
+
 function buildCalendarItems(data) {
   const itemsByDate = {};
   if (!data) return itemsByDate;
 
   (data.cm || []).forEach(c => pushItem(itemsByDate, c.start_date, TYPE_META.cm,
     c.title || c.project_name,
-    `${c.pid} — ${c.project_name}${c.start_time ? ' · ' + c.start_time : ''} · ${c.status} · PIC ${c.role === 'utama' ? 'Utama' : 'Support'}`));
+    `${c.pid} — ${c.project_name}${c.start_time ? ' · ' + c.start_time : ''} · ${c.status} · PIC ${rolesLabel(c.roles)}`));
 
   (data.pm || []).forEach(r => pushItem(itemsByDate, r.start_date, TYPE_META.pm,
     r.title || r.project_name,
-    `${r.pid} — ${r.project_name}${r.start_time ? ' · ' + r.start_time : ''} · ${r.status} · PIC ${r.role === 'utama' ? 'Utama' : 'Support'}`));
+    `${r.pid} — ${r.project_name}${r.start_time ? ' · ' + r.start_time : ''} · ${r.status} · PIC ${rolesLabel(r.roles)}`));
 
   (data.bastDeadlines || []).forEach(b => pushItem(itemsByDate, b.submitDeadline, TYPE_META.bast,
     `${b.label} — ${b.projectName}`,

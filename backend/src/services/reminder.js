@@ -2,6 +2,7 @@ const cron    = require('node-cron');
 const db      = require('../db');
 const { sendMail, lookupEmailById } = require('./email');
 const { renderEmail, formatSchedule, BAST_STEPS, BILLING_FREQ_LABELS, checklistHtml, checklistText } = require('./emailTemplate');
+const { picJoinClauses } = require('../utils/picSql');
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -200,6 +201,7 @@ async function checkBastSubmit() {
 
 async function checkActivityReminders(type) {
   const table        = type === 'cm' ? 'cm_requests' : 'pm_requests';
+  const picTable      = type === 'cm' ? 'cm_request_pics' : 'pm_request_pics';
   const reminderType = type === 'cm' ? 'cm_activity' : 'pm_activity';
   const typeLabel    = type === 'cm' ? 'Change Management' : 'Problem Management';
   const shortLabel   = type.toUpperCase();
@@ -208,11 +210,13 @@ async function checkActivityReminders(type) {
     SELECT
       r.id, r.project_id, r.title, r.status,
       r.start_date::text, r.end_date::text, r.start_time::text, r.end_time::text,
-      r.pic_utama_id, r.pic_support_id,
       p.pid, p.name, p.company,
-      (r.start_date - CURRENT_DATE) AS days_until
+      (r.start_date - CURRENT_DATE) AS days_until,
+      COALESCE(pic_utama_agg.users, '[]'::json)   AS pic_utama_users,
+      COALESCE(pic_support_agg.users, '[]'::json) AS pic_support_users
     FROM ${table} r
     JOIN projects p ON p.id = r.project_id
+    ${picJoinClauses(picTable, 'r')}
     WHERE r.status IN ('Open','In Progress')
       AND r.start_date IS NOT NULL
       AND (r.start_date - CURRENT_DATE) BETWEEN 1 AND 3
@@ -230,10 +234,8 @@ async function checkActivityReminders(type) {
       if (lastDate >= todayDate()) continue;
     }
 
-    const emails = (await Promise.all([
-      lookupEmail(req.pic_utama_id),
-      lookupEmail(req.pic_support_id),
-    ])).filter(Boolean);
+    const picIds = [...req.pic_utama_users, ...req.pic_support_users].map(u => u.id);
+    const emails = (await Promise.all(picIds.map(lookupEmail))).filter(Boolean);
 
     if (!emails.length) {
       console.log(`[reminder] no recipients for ${reminderType} request ${req.id}`);
