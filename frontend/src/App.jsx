@@ -8,6 +8,7 @@ import BastPage      from './pages/BastPage';
 import CmPage        from './pages/CmPage';
 import PmPage        from './pages/PmPage';
 import AccessControlPage from './pages/AccessControlPage';
+import ReminderSettingsPage from './pages/ReminderSettingsPage';
 import Header      from './components/layout/Header';
 import SummaryBar  from './components/layout/SummaryBar';
 import Tabs        from './components/layout/Tabs';
@@ -120,14 +121,25 @@ export default function App() {
   };
 
   const handleNavigateFromReminder = useCallback((item) => {
-    if (item.tab === 'cm' || item.tab === 'pm') setSearch(item.pid);
-    else setSearch('');
+    if (item.tab === 'cm' || item.tab === 'pm') {
+      setSearch(item.pid);
+      setFilterStatus(''); setFilterAdmin(''); setFilterPM(''); setFilterOM('');
+    } else {
+      setSearch('');
+    }
     setTab(item.tab);
     setTimeout(() => {
       const el = document.getElementById(`bast-project-${item.projectId}`) || document.getElementById(`project-row-${item.projectId}`);
       if (el) { el.scrollIntoView({ behavior:'smooth', block:'center' }); el.style.outline='2px solid #3b82f6'; el.style.borderRadius='8px'; setTimeout(() => { el.style.outline=''; }, 2000); }
     }, 120);
   }, []);
+
+  const handleTabChange = (t) => {
+    if (['cm', 'pm', 'reminders'].includes(t)) {
+      setFilterStatus(''); setFilterAdmin(''); setFilterPM(''); setFilterOM('');
+    }
+    setTab(t);
+  };
 
   const handleExport = (scope) => {
     runExport(projects, cmRequests, pmRequests, scope, scope === 'filtered' ? (p => filtered.includes(p)) : null);
@@ -146,10 +158,10 @@ export default function App() {
           companyCount={new Set(projects.map(p => p.company)).size}
           onUsersClick={() => setUserModal(true)}
         />
-        <Tabs active={tab} onChange={t => setTab(t)} />
+        <Tabs active={tab} onChange={handleTabChange} />
       </div>
       {tab === 'projects' && <SummaryBar projects={projects} onStatClick={f => setStatFilter(f)} />}
-      {tab !== 'dashboard' && (
+      {!['dashboard', 'access', 'reminderSettings'].includes(tab) && (
         <Toolbar
           search={search} onSearch={setSearch}
           filterStatus={filterStatus} onFilterStatus={setFilterStatus}
@@ -160,6 +172,10 @@ export default function App() {
           companies={companies} admins={admins} pms={pms} oms={oms}
           onExport={() => setExportModal(true)}
           onAddProject={() => setProjectModal({ open:true, project:null })}
+          showStatus={!['cm', 'pm', 'reminders'].includes(tab)}
+          showAdmin={!['cm', 'pm', 'reminders'].includes(tab)}
+          showPM={!['cm', 'pm', 'reminders'].includes(tab)}
+          showOM={!['cm', 'pm', 'reminders'].includes(tab)}
         />
       )}
       <div className="content">
@@ -192,6 +208,9 @@ export default function App() {
               <PmPage requests={filteredPm} projects={projects} users={usersList} onRefresh={loadAll} />
             )}
             {tab === 'access' && <AccessControlPage />}
+            {tab === 'reminderSettings' && (
+              <ReminderSettingsPage projects={projects} onRefresh={loadAll} />
+            )}
           </>
         )}
       </div>

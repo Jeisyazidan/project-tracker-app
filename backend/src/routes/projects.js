@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const db     = require('../db');
-const { requireAuth }       = require('../middleware/auth');
-const { requirePermission } = require('../middleware/rbac');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requirePermission }         = require('../middleware/rbac');
 
 router.use(requireAuth);
 
@@ -140,6 +140,23 @@ router.put('/:id', requirePermission('edit_project'), async (req, res) => {
     res.json(rows[0]);
   } catch (err) {
     console.error('PUT /projects/:id error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/projects/:id/reminders — admin-only toggle to exclude a project from all reminders
+router.put('/:id/reminders', requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const enabled = !!req.body.enabled;
+  try {
+    const { rows } = await db.query(
+      'UPDATE projects SET reminders_enabled=$1, updated_at=NOW() WHERE id=$2 RETURNING id, reminders_enabled',
+      [enabled, id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Project not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('PUT /projects/:id/reminders error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

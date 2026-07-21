@@ -8,6 +8,7 @@ const TAB_LIST = [
   { key: 'cm',        label: '🤝 CM Meetings',     perm: 'view_cm'        },
   { key: 'pm',        label: '🔧 PM Meetings',     perm: 'view_pm'        },
   { key: 'access',    label: '🔐 Access Control',  adminOnly: true        },
+  { key: 'reminderSettings', label: '⚙️ Reminder Settings', adminOnly: true },
 ];
 
 export default function Tabs({ active, onChange }) {

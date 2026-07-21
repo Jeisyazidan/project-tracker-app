@@ -22,6 +22,15 @@ async function getLog(projectId, reminderType, referenceId) {
   return rows[0] || null;
 }
 
+// Global per-type on/off flags, admin-configurable via /api/reminders/settings.
+// Missing rows default to enabled (matches the route's own fallback behavior).
+async function getReminderSettings() {
+  const { rows } = await db.query('SELECT reminder_type, enabled FROM reminder_settings');
+  const map = { contract_end: true, bast_submit: true, cm_activity: true, pm_activity: true };
+  rows.forEach(r => { map[r.reminder_type] = r.enabled; });
+  return map;
+}
+
 async function markSent(projectId, reminderType, referenceId) {
   await db.query(
     `INSERT INTO reminder_logs (project_id, reminder_type, reference_id, send_count, last_sent_at)
@@ -69,6 +78,7 @@ async function checkContractEnd() {
     FROM projects
     WHERE deadline IS NOT NULL
       AND deadline - CURRENT_DATE BETWEEN 0 AND 60
+      AND reminders_enabled = true
   `);
 
   for (const p of rows) {
@@ -139,6 +149,7 @@ async function checkBastSubmit() {
     WHERE bp.submit_deadline IS NOT NULL
       AND false = ANY(bp.steps)
       AND (bp.submit_deadline - CURRENT_DATE) <= 30
+      AND p.reminders_enabled = true
   `);
 
   for (const period of rows) {
@@ -220,6 +231,7 @@ async function checkActivityReminders(type) {
     WHERE r.status IN ('Open','In Progress')
       AND r.start_date IS NOT NULL
       AND (r.start_date - CURRENT_DATE) BETWEEN 1 AND 3
+      AND p.reminders_enabled = true
   `);
 
   for (const req of rows) {
@@ -271,6 +283,7 @@ async function checkActivityReminders(type) {
 
 async function runAllReminders() {
   console.log('[reminder] starting check at', new Date().toISOString());
+  const settings = await getReminderSettings();
   const checks = [
     ['contract_end',  checkContractEnd],
     ['bast_submit',   checkBastSubmit],
@@ -278,6 +291,10 @@ async function runAllReminders() {
     ['pm_activity',   () => checkActivityReminders('pm')],
   ];
   for (const [name, fn] of checks) {
+    if (!settings[name]) {
+      console.log(`[reminder] ${name} check skipped (disabled in settings)`);
+      continue;
+    }
     try {
       await fn();
     } catch (err) {
