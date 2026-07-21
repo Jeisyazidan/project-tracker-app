@@ -57,13 +57,14 @@ function assigneeSummary(assignees) {
 }
 
 // Only admins can reach the "All Users" view, so every item here carries an
-// `assignees` array — narrow it to whichever users match the typed name and
-// drop items nobody matching is on, so the calendar shows just that
-// person's activity (and which customer/project it's for).
-function filterDataByAssignee(data, query) {
-  const q = query.trim().toLowerCase();
-  if (!data || !q) return data;
-  const matches = a => (a.username || '').toLowerCase().includes(q);
+// `assignees` array — narrow it to the picked user and drop items they
+// aren't on, so the calendar shows just that person's activity (and which
+// customer/project it's for). `username` comes from a <select> of real
+// users, so this is an exact (case-insensitive) match, not a substring one.
+function filterDataByAssignee(data, username) {
+  if (!data || !username) return data;
+  const target = username.toLowerCase();
+  const matches = a => (a.username || '').toLowerCase() === target;
   const filterItems = items => (items || [])
     .map(item => ({ ...item, assignees: (item.assignees || []).filter(matches) }))
     .filter(item => item.assignees.length > 0);
@@ -153,9 +154,13 @@ function buildAllCalendarItemsSorted(data, sortBy) {
   return itemsByDate;
 }
 
-export default function DashboardPage() {
+export default function DashboardPage({ users = [] }) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+
+  const sortedUsers = useMemo(() => (
+    [...users].sort((a, b) => a.username.localeCompare(b.username))
+  ), [users]);
 
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
@@ -202,13 +207,35 @@ export default function DashboardPage() {
   const goNext  = () => setCursor(c => c.month === 12 ? { month:1,  year:c.year + 1 } : { month:c.month + 1, year:c.year });
   const goToday = () => { const d = new Date(); setCursor({ month:d.getMonth() + 1, year:d.getFullYear() }); };
 
+  // ±5 years around today, widened to always include whatever year is
+  // currently selected (e.g. after repeated ◀/▶ navigation past the range).
+  const yearOptions = useMemo(() => {
+    const now = new Date().getFullYear();
+    const min = Math.min(now - 5, cursor.year);
+    const max = Math.max(now + 5, cursor.year);
+    const arr = [];
+    for (let y = min; y <= max; y++) arr.push(y);
+    return arr;
+  }, [cursor.year]);
+
   return (
     <div>
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, flexWrap:'wrap' }}>
         <button className="btn btn-secondary" style={{ fontSize:12, padding:'4px 10px' }} onClick={goPrev}>◀</button>
-        <div style={{ fontSize:15, fontWeight:700, minWidth:160, textAlign:'center' }}>
-          {MONTH_NAMES[cursor.month - 1]} {cursor.year}
-        </div>
+        <select
+          value={cursor.month}
+          onChange={e => setCursor(c => ({ ...c, month: Number(e.target.value) }))}
+          style={{ fontSize:13, fontWeight:700, padding:'5px 8px' }}
+        >
+          {MONTH_NAMES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+        </select>
+        <select
+          value={cursor.year}
+          onChange={e => setCursor(c => ({ ...c, year: Number(e.target.value) }))}
+          style={{ fontSize:13, fontWeight:700, padding:'5px 8px' }}
+        >
+          {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
         <button className="btn btn-secondary" style={{ fontSize:12, padding:'4px 10px' }} onClick={goNext}>▶</button>
         <button className="btn btn-secondary" style={{ fontSize:12, padding:'4px 10px' }} onClick={goToday}>Today</button>
 
@@ -234,13 +261,16 @@ export default function DashboardPage() {
           </select>
         )}
         {showingAll && (
-          <input
-            type="text"
+          <select
             value={nameFilter}
             onChange={e => setNameFilter(e.target.value)}
-            placeholder="Filter by name…"
-            style={{ fontSize:12, padding:'4px 8px', width:150, border:'1px solid var(--input-border)', borderRadius:6, background:'var(--input-bg)', color:'var(--text)', fontFamily:'inherit' }}
-          />
+            style={{ fontSize:12, padding:'4px 8px', maxWidth:180 }}
+          >
+            <option value="">— All Users —</option>
+            {sortedUsers.map(u => (
+              <option key={u.id} value={u.username}>{u.username} ({ROLE_LABEL[u.role] || u.role})</option>
+            ))}
+          </select>
         )}
 
         <div style={{ flex:1 }} />
@@ -262,7 +292,7 @@ export default function DashboardPage() {
           {totalItems === 0 && (
             <EmptyState icon="✅" message={
               !showingAll ? 'Nothing assigned to you this month.'
-                : nameFilter.trim() ? `No matches for "${nameFilter.trim()}" this month.`
+                : nameFilter ? `Nothing assigned to ${nameFilter} this month.`
                 : 'Nothing assigned to anyone this month.'
             } />
           )}

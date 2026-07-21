@@ -183,7 +183,7 @@ export default function App() {
           <div className="empty-state"><div className="icon" style={{ fontSize:28 }}>⏳</div><div>Loading data…</div></div>
         ) : (
           <>
-            {tab === 'dashboard' && <DashboardPage />}
+            {tab === 'dashboard' && <DashboardPage users={usersList} />}
             {tab === 'projects' && (
               <ProjectsPage
                 projects={filtered}
