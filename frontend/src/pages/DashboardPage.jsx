@@ -56,27 +56,50 @@ function assigneeSummary(assignees) {
   return assignees.map(a => `${a.relation}: ${a.username}`).join(', ');
 }
 
+// Only admins can reach the "All Users" view, so every item here carries an
+// `assignees` array — narrow it to whichever users match the typed name and
+// drop items nobody matching is on, so the calendar shows just that
+// person's activity (and which customer/project it's for).
+function filterDataByAssignee(data, query) {
+  const q = query.trim().toLowerCase();
+  if (!data || !q) return data;
+  const matches = a => (a.username || '').toLowerCase().includes(q);
+  const filterItems = items => (items || [])
+    .map(item => ({ ...item, assignees: (item.assignees || []).filter(matches) }))
+    .filter(item => item.assignees.length > 0);
+  return {
+    ...data,
+    cm: filterItems(data.cm),
+    pm: filterItems(data.pm),
+    bastDeadlines: filterItems(data.bastDeadlines),
+    contractDeadlines: filterItems(data.contractDeadlines),
+  };
+}
+
 // Admin "All Users" calendar — every item may have several assignees, so
 // the summary is appended to the detail line instead of a single PIC label.
+// The customer/company name is included here (but not in the personal
+// "My Dashboard" view) since seeing who's assigned where across customers
+// is the point of this view.
 function buildAllCalendarItems(data) {
   const itemsByDate = {};
   if (!data) return itemsByDate;
 
   (data.cm || []).forEach(c => pushItem(itemsByDate, c.start_date, TYPE_META.cm,
     c.title || c.project_name,
-    `${c.pid} — ${c.project_name}${c.start_time ? ' · ' + c.start_time : ''} · ${c.status} · ${assigneeSummary(c.assignees)}`));
+    `${c.pid} — ${c.company} — ${c.project_name}${c.start_time ? ' · ' + c.start_time : ''} · ${c.status} · ${assigneeSummary(c.assignees)}`));
 
   (data.pm || []).forEach(r => pushItem(itemsByDate, r.start_date, TYPE_META.pm,
     r.title || r.project_name,
-    `${r.pid} — ${r.project_name}${r.start_time ? ' · ' + r.start_time : ''} · ${r.status} · ${assigneeSummary(r.assignees)}`));
+    `${r.pid} — ${r.company} — ${r.project_name}${r.start_time ? ' · ' + r.start_time : ''} · ${r.status} · ${assigneeSummary(r.assignees)}`));
 
   (data.bastDeadlines || []).forEach(b => pushItem(itemsByDate, b.submitDeadline, TYPE_META.bast,
     `${b.label} — ${b.projectName}`,
-    `${b.pid} — ${b.projectName} · ${b.stepsDone}/${b.totalSteps} steps · ${assigneeSummary(b.assignees)}`));
+    `${b.pid} — ${b.company} — ${b.projectName} · ${b.stepsDone}/${b.totalSteps} steps · ${assigneeSummary(b.assignees)}`));
 
   (data.contractDeadlines || []).forEach(p => pushItem(itemsByDate, p.deadline, TYPE_META.contract,
     `Contract End — ${p.project_name}`,
-    `${p.pid} — ${p.project_name} · ${assigneeSummary(p.assignees)}`));
+    `${p.pid} — ${p.company} — ${p.project_name} · ${assigneeSummary(p.assignees)}`));
 
   return itemsByDate;
 }
@@ -106,19 +129,19 @@ function buildAllCalendarItemsSorted(data, sortBy) {
 
   addRows(data.cm || [], TYPE_META.cm,
     c => c.title || c.project_name,
-    c => `${c.pid} — ${c.project_name}${c.start_time ? ' · ' + c.start_time : ''} · ${c.status}`,
+    c => `${c.pid} — ${c.company} — ${c.project_name}${c.start_time ? ' · ' + c.start_time : ''} · ${c.status}`,
     c => c.start_date);
   addRows(data.pm || [], TYPE_META.pm,
     r => r.title || r.project_name,
-    r => `${r.pid} — ${r.project_name}${r.start_time ? ' · ' + r.start_time : ''} · ${r.status}`,
+    r => `${r.pid} — ${r.company} — ${r.project_name}${r.start_time ? ' · ' + r.start_time : ''} · ${r.status}`,
     r => r.start_date);
   addRows(data.bastDeadlines || [], TYPE_META.bast,
     b => `${b.label} — ${b.projectName}`,
-    b => `${b.pid} — ${b.projectName} · ${b.stepsDone}/${b.totalSteps} steps`,
+    b => `${b.pid} — ${b.company} — ${b.projectName} · ${b.stepsDone}/${b.totalSteps} steps`,
     b => b.submitDeadline);
   addRows(data.contractDeadlines || [], TYPE_META.contract,
     p => `Contract End — ${p.project_name}`,
-    p => `${p.pid} — ${p.project_name}`,
+    p => `${p.pid} — ${p.company} — ${p.project_name}`,
     p => p.deadline);
 
   const sortKey = row => sortBy === 'role'
@@ -138,8 +161,9 @@ export default function DashboardPage() {
     const d = new Date();
     return { month: d.getMonth() + 1, year: d.getFullYear() };
   });
-  const [viewMode, setViewMode] = useState('me'); // 'me' | 'all' (admin only)
-  const [sortBy, setSortBy]     = useState('date'); // 'date' | 'name' | 'role' (viewMode 'all' only)
+  const [viewMode, setViewMode]   = useState('me'); // 'me' | 'all' (admin only)
+  const [sortBy, setSortBy]       = useState('date'); // 'date' | 'name' | 'role' (viewMode 'all' only)
+  const [nameFilter, setNameFilter] = useState(''); // (viewMode 'all' only)
   const [data, setData]         = useState(null);
   const [loading, setLoading]   = useState(true);
   const [dayModal, setDayModal] = useState({ open:false, iso:'', items:[] });
@@ -157,18 +181,22 @@ export default function DashboardPage() {
 
   const showingAll = isAdmin && viewMode === 'all';
 
-  // Sort-by-name/role only applies to the "All Users" view — snap back to
-  // the default date ordering when leaving it.
-  useEffect(() => { if (!showingAll) setSortBy('date'); }, [showingAll]);
+  // Sort-by-name/role and the name filter only apply to the "All Users"
+  // view — snap back to the defaults when leaving it.
+  useEffect(() => { if (!showingAll) { setSortBy('date'); setNameFilter(''); } }, [showingAll]);
+
+  const filteredData = useMemo(() => (
+    showingAll ? filterDataByAssignee(data, nameFilter) : data
+  ), [data, showingAll, nameFilter]);
 
   const itemsByDate = useMemo(() => {
-    if (!showingAll) return buildCalendarItems(data);
-    return sortBy === 'date' ? buildAllCalendarItems(data) : buildAllCalendarItemsSorted(data, sortBy);
-  }, [data, showingAll, sortBy]);
+    if (!showingAll) return buildCalendarItems(filteredData);
+    return sortBy === 'date' ? buildAllCalendarItems(filteredData) : buildAllCalendarItemsSorted(filteredData, sortBy);
+  }, [filteredData, showingAll, sortBy]);
 
   const totalItems = useMemo(() => (
-    data ? data.cm.length + data.pm.length + data.bastDeadlines.length + data.contractDeadlines.length : 0
-  ), [data]);
+    filteredData ? filteredData.cm.length + filteredData.pm.length + filteredData.bastDeadlines.length + filteredData.contractDeadlines.length : 0
+  ), [filteredData]);
 
   const goPrev  = () => setCursor(c => c.month === 1  ? { month:12, year:c.year - 1 } : { month:c.month - 1, year:c.year });
   const goNext  = () => setCursor(c => c.month === 12 ? { month:1,  year:c.year + 1 } : { month:c.month + 1, year:c.year });
@@ -205,6 +233,15 @@ export default function DashboardPage() {
             <option value="role">Sort: Role</option>
           </select>
         )}
+        {showingAll && (
+          <input
+            type="text"
+            value={nameFilter}
+            onChange={e => setNameFilter(e.target.value)}
+            placeholder="Filter by name…"
+            style={{ fontSize:12, padding:'4px 8px', width:150, border:'1px solid var(--input-border)', borderRadius:6, background:'var(--input-bg)', color:'var(--text)', fontFamily:'inherit' }}
+          />
+        )}
 
         <div style={{ flex:1 }} />
         {!loading && data && (
@@ -223,7 +260,11 @@ export default function DashboardPage() {
             onDayClick={(iso, items) => setDayModal({ open:true, iso, items })}
           />
           {totalItems === 0 && (
-            <EmptyState icon="✅" message={showingAll ? 'Nothing assigned to anyone this month.' : 'Nothing assigned to you this month.'} />
+            <EmptyState icon="✅" message={
+              !showingAll ? 'Nothing assigned to you this month.'
+                : nameFilter.trim() ? `No matches for "${nameFilter.trim()}" this month.`
+                : 'Nothing assigned to anyone this month.'
+            } />
           )}
         </>
       )}
