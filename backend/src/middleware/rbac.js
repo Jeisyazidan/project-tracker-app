@@ -1,11 +1,11 @@
 const db = require('../db');
 
 const DEFAULT_ROLE_PERMISSIONS = {
-  pm:               { view_projects:true,  add_project:true,  edit_project:true,  delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true  },
-  om:               { view_projects:true,  add_project:true,  edit_project:true,  delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true  },
-  system_engineer:  { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:true,  view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true  },
-  dba:              { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:true,  view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true  },
-  technical_writer: { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:false, view_pm:true,  manage_pm:false },
+  pm:               { view_projects:true,  add_project:true,  edit_project:true,  delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true,  view_insights:true },
+  om:               { view_projects:true,  add_project:true,  edit_project:true,  delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true,  view_insights:true },
+  system_engineer:  { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:true,  view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true,  view_insights:true },
+  dba:              { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:true,  view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true,  view_insights:true },
+  technical_writer: { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:false, view_pm:true,  manage_pm:false, view_insights:true },
 };
 
 async function getRolePermissions(role) {
@@ -14,7 +14,9 @@ async function getRolePermissions(role) {
     const { rows } = await db.query(
       'SELECT permissions FROM role_permissions WHERE role = $1', [role]
     );
-    return rows[0]?.permissions || DEFAULT_ROLE_PERMISSIONS[role] || {};
+    // Merge under defaults (not replace) so a role with an older saved
+    // permissions row still picks up newly-added permission keys.
+    return { ...(DEFAULT_ROLE_PERMISSIONS[role] || {}), ...(rows[0]?.permissions || {}) };
   } catch {
     return DEFAULT_ROLE_PERMISSIONS[role] || {};
   }

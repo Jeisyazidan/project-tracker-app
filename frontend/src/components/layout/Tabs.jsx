@@ -7,6 +7,7 @@ const TAB_LIST = [
   { key: 'bast',      label: '📄 BAST Billing',    perm: 'view_bast'      },
   { key: 'cm',        label: '🤝 CM Meetings',     perm: 'view_cm'        },
   { key: 'pm',        label: '🔧 PM Meetings',     perm: 'view_pm'        },
+  { key: 'insights',  label: '📊 Insights',        perm: 'view_insights'  },
   { key: 'access',    label: '🔐 Access Control',  adminOnly: true        },
   { key: 'reminderSettings', label: '⚙️ Reminder Settings', adminOnly: true },
 ];

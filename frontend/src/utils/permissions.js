@@ -10,14 +10,15 @@ export const ALL_PERMISSIONS = [
   { key:'manage_cm',      label:'Manage CM Requests',  desc:'Add, edit, delete CM requests' },
   { key:'view_pm',        label:'View PM Meetings',    desc:'See PM Meetings tab' },
   { key:'manage_pm',      label:'Manage PM Requests',  desc:'Add, edit, delete PM requests' },
+  { key:'view_insights',  label:'View Insights',       desc:'See the Insights analytics tab' },
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS = {
-  pm:               { view_projects:true,  add_project:true,  edit_project:true,  delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true  },
-  om:               { view_projects:true,  add_project:true,  edit_project:true,  delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true  },
-  system_engineer:  { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:true,  view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true  },
-  dba:              { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:true,  view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true  },
-  technical_writer: { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:false, view_pm:true,  manage_pm:false },
+  pm:               { view_projects:true,  add_project:true,  edit_project:true,  delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true,  view_insights:true },
+  om:               { view_projects:true,  add_project:true,  edit_project:true,  delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true,  view_insights:true },
+  system_engineer:  { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:true,  view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true,  view_insights:true },
+  dba:              { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:true,  view_cm:true,  manage_cm:true,  view_pm:true,  manage_pm:true,  view_insights:true },
+  technical_writer: { view_projects:true,  add_project:false, edit_project:false, delete_project:false, view_reminders:true,  view_bast:true,  edit_bast:false, view_cm:true,  manage_cm:false, view_pm:true,  manage_pm:false, view_insights:true },
 };
 
 export function can(user, permKey, rolePermsMap) {

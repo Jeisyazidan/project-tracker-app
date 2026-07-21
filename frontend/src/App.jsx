@@ -7,6 +7,7 @@ import RemindersPage from './pages/RemindersPage';
 import BastPage      from './pages/BastPage';
 import CmPage        from './pages/CmPage';
 import PmPage        from './pages/PmPage';
+import InsightsPage from './pages/InsightsPage';
 import AccessControlPage from './pages/AccessControlPage';
 import ReminderSettingsPage from './pages/ReminderSettingsPage';
 import Header      from './components/layout/Header';
@@ -161,7 +162,7 @@ export default function App() {
         <Tabs active={tab} onChange={handleTabChange} />
       </div>
       {tab === 'projects' && <SummaryBar projects={projects} onStatClick={f => setStatFilter(f)} />}
-      {!['dashboard', 'access', 'reminderSettings'].includes(tab) && (
+      {!['dashboard', 'access', 'reminderSettings', 'insights'].includes(tab) && (
         <Toolbar
           search={search} onSearch={setSearch}
           filterStatus={filterStatus} onFilterStatus={setFilterStatus}
@@ -206,6 +207,9 @@ export default function App() {
             )}
             {tab === 'pm' && (
               <PmPage requests={filteredPm} projects={projects} users={usersList} onRefresh={loadAll} />
+            )}
+            {tab === 'insights' && (
+              <InsightsPage projects={projects} cmRequests={cmRequests} pmRequests={pmRequests} usersList={usersList} />
             )}
             {tab === 'access' && <AccessControlPage />}
             {tab === 'reminderSettings' && (

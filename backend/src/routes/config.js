@@ -10,11 +10,14 @@ router.use(requireAuth);
 router.get('/permissions', async (req, res) => {
   try {
     const { rows } = await db.query('SELECT role, permissions FROM role_permissions');
+    const stored = {};
+    rows.forEach(r => { stored[r.role] = r.permissions; });
+    // Merge each role's stored permissions under its defaults so a role
+    // with an older saved row still picks up newly-added permission keys,
+    // rather than replacing the defaults outright.
     const map = {};
-    rows.forEach(r => { map[r.role] = r.permissions; });
-    // Fill in any missing roles with defaults
     Object.keys(DEFAULT_ROLE_PERMISSIONS).forEach(role => {
-      if (!map[role]) map[role] = DEFAULT_ROLE_PERMISSIONS[role];
+      map[role] = { ...DEFAULT_ROLE_PERMISSIONS[role], ...(stored[role] || {}) };
     });
     res.json(map);
   } catch (err) {
