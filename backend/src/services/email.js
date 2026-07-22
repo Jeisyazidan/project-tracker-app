@@ -86,7 +86,7 @@ async function lookupEmailById(userId) {
 async function sendAssignmentEmail({ type, isNew, title, project, startDate, startTime, endDate, endTime, status, picUtamaName, picSupportName, notes, recipients }) {
   if (!recipients || !recipients.length) return;
 
-  const typeLabel = type === 'cm' ? 'Change Management' : 'Problem Management';
+  const typeLabel = type === 'cm' ? 'Corrective Maintenance' : 'Preventive Maintenance';
   const shortLabel = type.toUpperCase();
   const introLine = isNew
     ? `You've been assigned to a new ${typeLabel.toLowerCase()} activity. Here are the details:`

@@ -214,7 +214,7 @@ async function checkActivityReminders(type) {
   const table        = type === 'cm' ? 'cm_requests' : 'pm_requests';
   const picTable      = type === 'cm' ? 'cm_request_pics' : 'pm_request_pics';
   const reminderType = type === 'cm' ? 'cm_activity' : 'pm_activity';
-  const typeLabel    = type === 'cm' ? 'Change Management' : 'Problem Management';
+  const typeLabel    = type === 'cm' ? 'Corrective Maintenance' : 'Preventive Maintenance';
   const shortLabel   = type.toUpperCase();
 
   const { rows } = await db.query(`
