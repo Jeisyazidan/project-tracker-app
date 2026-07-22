@@ -4,7 +4,7 @@ import { chromeColor } from '../../utils/insightsColors';
 // Donut + inline legend (label/count/%) for a ≤6-category status breakdown.
 // The legend is the dependable identity channel (never rely on color alone),
 // and doubles as the "table view" at this segment count.
-export default function StatusDonut({ title, data, dark }) {
+export default function StatusDonut({ title, data, dark, onSliceClick }) {
   const total = data.reduce((acc, d) => acc + d.value, 0);
   const segments = data.filter(d => d.value > 0);
   const mutedText = chromeColor('mutedText', dark);
@@ -18,8 +18,12 @@ export default function StatusDonut({ title, data, dark }) {
         <>
           <ResponsiveContainer width="100%" height={160}>
             <PieChart>
-              <Pie data={segments} dataKey="value" nameKey="label" innerRadius={44} outerRadius={68} paddingAngle={segments.length > 1 ? 2 : 0} stroke="var(--surface)" strokeWidth={2}>
-                {segments.map(d => <Cell key={d.label} fill={d.color} />)}
+              <Pie
+                data={segments} dataKey="value" nameKey="label" innerRadius={44} outerRadius={68}
+                paddingAngle={segments.length > 1 ? 2 : 0} stroke="var(--surface)" strokeWidth={2}
+                onClick={onSliceClick ? (_, index) => onSliceClick(segments[index]) : undefined}
+              >
+                {segments.map(d => <Cell key={d.label} fill={d.color} style={{ cursor: onSliceClick ? 'pointer' : 'default' }} />)}
               </Pie>
               <Tooltip
                 formatter={(value, name) => [`${value} (${Math.round((value / total) * 100)}%)`, name]}

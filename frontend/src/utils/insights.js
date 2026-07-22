@@ -12,6 +12,13 @@ function topNWithOther(entries) {
   return top;
 }
 
+// Keys that fall past the top-N cutoff (i.e. collapsed into "Other").
+// Shared by every top-N+Other chart's detail drill-down so "Other"
+// membership never drifts from the chart's own cutoff.
+function overflowKeys(counts) {
+  return new Set(Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k]) => k).slice(TOP_N));
+}
+
 export function getStatusCounts(projects) {
   const counts = {};
   projects.forEach(p => { counts[p.status] = (counts[p.status] || 0) + 1; });
@@ -30,48 +37,69 @@ export function getHandoverCounts(projects) {
 // Completed projects don't carry an "expiring" urgency (mirrors the badge
 // shown in ProjectsPage, which replaces the days-until countdown with a
 // plain "Completed" badge once a project is done).
+function expiryBucketKey(p) {
+  if (p.status === 'Completed' || !p.deadline) return null;
+  const d = daysDiff(p.deadline);
+  if (d === null) return null;
+  if (d < 0) return 'expired';
+  if (d <= 30) return 'within30';
+  if (d <= 90) return 'within90';
+  return 'beyond90';
+}
+
 export function getExpiryBuckets(projects) {
   const buckets = { expired: 0, within30: 0, within90: 0, beyond90: 0 };
   projects.forEach(p => {
-    if (p.status === 'Completed' || !p.deadline) return;
-    const d = daysDiff(p.deadline);
-    if (d === null) return;
-    if (d < 0) buckets.expired++;
-    else if (d <= 30) buckets.within30++;
-    else if (d <= 90) buckets.within90++;
-    else buckets.beyond90++;
+    const key = expiryBucketKey(p);
+    if (key) buckets[key]++;
   });
   return buckets;
+}
+
+export function getProjectsByExpiryBucket(projects, bucketKey) {
+  return projects.filter(p => expiryBucketKey(p) === bucketKey);
 }
 
 function allProjectPeriods(project) {
   return mergePeriods(project, project.bast_stored_periods || []);
 }
 
+// Every {project, period} pair across all projects — the shared base for
+// BAST detail drill-downs (billing bucket, bottleneck step, per-company).
+function allPeriodRows(projects) {
+  const rows = [];
+  projects.forEach(p => allProjectPeriods(p).forEach(period => rows.push({ project: p, period })));
+  return rows;
+}
+
 export function getBastSummary(projects) {
   let billed = 0, inProgress = 0, pending = 0;
-  projects.forEach(p => {
-    allProjectPeriods(p).forEach(per => {
-      const label = stepsDoneLabel(per.steps);
-      if (label === 'Billed') billed++;
-      else if (label === 'In Progress') inProgress++;
-      else pending++;
-    });
+  allPeriodRows(projects).forEach(({ period }) => {
+    const label = stepsDoneLabel(period.steps);
+    if (label === 'Billed') billed++;
+    else if (label === 'In Progress') inProgress++;
+    else pending++;
   });
   return { billed, inProgress, pending, totalPeriods: billed + inProgress + pending };
+}
+
+export function getPeriodsByBillingBucket(projects, bucketLabel) {
+  return allPeriodRows(projects).filter(({ period }) => stepsDoneLabel(period.steps) === bucketLabel);
 }
 
 // Among not-yet-billed periods, count which checklist step (first `false`
 // in the steps array) each one is currently stuck waiting on.
 export function getBastBottlenecks(projects) {
   const counts = new Array(BAST_STEPS.length).fill(0);
-  projects.forEach(p => {
-    allProjectPeriods(p).forEach(per => {
-      const idx = per.steps.findIndex(s => !s);
-      if (idx !== -1) counts[idx]++;
-    });
+  allPeriodRows(projects).forEach(({ period }) => {
+    const idx = period.steps.findIndex(s => !s);
+    if (idx !== -1) counts[idx]++;
   });
   return counts;
+}
+
+export function getPeriodsByBottleneckStep(projects, stepIndex) {
+  return allPeriodRows(projects).filter(({ period }) => period.steps.findIndex(s => !s) === stepIndex);
 }
 
 export function getRequestStatusCounts(requests) {
@@ -81,6 +109,10 @@ export function getRequestStatusCounts(requests) {
     counts[s] = (counts[s] || 0) + 1;
   });
   return counts;
+}
+
+export function getRequestsByStatus(requests, label) {
+  return requests.filter(r => (r.status || 'Open') === label);
 }
 
 // Trailing `months` calendar months (including the current one), bucketed
@@ -111,8 +143,7 @@ export function getMonthlyTrend(cmRequests, pmRequests, months = 6) {
 
 // Active (Open + In Progress) CM/PM assignments per user, counting a user
 // once per request even if they hold both PIC Utama and PIC Support on it.
-export function getPicWorkload(cmRequests, pmRequests, usersList) {
-  const nameById = Object.fromEntries((usersList || []).map(u => [u.id, u.username]));
+function picActiveCounts(cmRequests, pmRequests) {
   const counts = {};
   const tally = requests => {
     requests.forEach(r => {
@@ -126,6 +157,12 @@ export function getPicWorkload(cmRequests, pmRequests, usersList) {
   };
   tally(cmRequests);
   tally(pmRequests);
+  return counts;
+}
+
+export function getPicWorkload(cmRequests, pmRequests, usersList) {
+  const nameById = Object.fromEntries((usersList || []).map(u => [u.id, u.username]));
+  const counts = picActiveCounts(cmRequests, pmRequests);
   const entries = Object.entries(counts).map(([id, value]) => ({
     label: nameById[id] || `User #${id}`,
     value,
@@ -133,13 +170,60 @@ export function getPicWorkload(cmRequests, pmRequests, usersList) {
   return topNWithOther(entries);
 }
 
-export function getCompanyBreakdown(projects) {
+export function getPicWorkloadRequests(cmRequests, pmRequests, usersList, label) {
+  const idByName = Object.fromEntries((usersList || []).map(u => [u.username, String(u.id)]));
+  const counts = picActiveCounts(cmRequests, pmRequests);
+  const targetIds = label === 'Other' ? overflowKeys(counts) : new Set([idByName[label]]);
+  const isActive = r => r.status === 'Open' || r.status === 'In Progress';
+  const picIds = r => new Set([
+    ...(r.pic_utama_users || []).map(u => String(u.id)),
+    ...(r.pic_support_users || []).map(u => String(u.id)),
+  ]);
+  return [
+    ...cmRequests.filter(isActive).map(r => ({ ...r, requestType: 'CM' })),
+    ...pmRequests.filter(isActive).map(r => ({ ...r, requestType: 'PM' })),
+  ].filter(r => [...picIds(r)].some(id => targetIds.has(id)));
+}
+
+function companyCounts(projects) {
   const counts = {};
   projects.forEach(p => {
     const c = p.company || 'Unknown';
     counts[c] = (counts[c] || 0) + 1;
   });
-  return topNWithOther(Object.entries(counts).map(([label, value]) => ({ label, value })));
+  return counts;
+}
+
+export function getCompanyBreakdown(projects) {
+  return topNWithOther(Object.entries(companyCounts(projects)).map(([label, value]) => ({ label, value })));
+}
+
+export function getProjectsByCompanyBucket(projects, label) {
+  const counts = companyCounts(projects);
+  if (label === 'Other') {
+    const overflow = overflowKeys(counts);
+    return projects.filter(p => overflow.has(p.company || 'Unknown'));
+  }
+  return projects.filter(p => (p.company || 'Unknown') === label);
+}
+
+function companyPeriodRows(projects) {
+  const byCompany = {};
+  projects.forEach(p => {
+    const periods = allProjectPeriods(p);
+    if (!periods.length) return;
+    const c = p.company || 'Unknown';
+    (byCompany[c] ||= []).push(...periods.map(period => ({ project: p, period })));
+  });
+  return byCompany;
+}
+
+export function getPeriodsByCompanyBucket(projects, label) {
+  const byCompany = companyPeriodRows(projects);
+  if (label !== 'Other') return byCompany[label] || [];
+  const counts = Object.fromEntries(Object.entries(byCompany).map(([c, rows]) => [c, rows.length]));
+  const overflow = overflowKeys(counts);
+  return Object.entries(byCompany).filter(([c]) => overflow.has(c)).flatMap(([, rows]) => rows);
 }
 
 // BAST completion % per company. The "Other" bucket (companies past the
@@ -147,13 +231,8 @@ export function getCompanyBreakdown(projects) {
 // percentages, so it stays a mathematically valid completion rate.
 export function getCompanyBastCompletion(projects) {
   const byCompany = {};
-  projects.forEach(p => {
-    const periods = allProjectPeriods(p);
-    if (!periods.length) return;
-    const c = p.company || 'Unknown';
-    if (!byCompany[c]) byCompany[c] = { billed: 0, total: 0 };
-    byCompany[c].total += periods.length;
-    byCompany[c].billed += periods.filter(per => per.steps.every(Boolean)).length;
+  Object.entries(companyPeriodRows(projects)).forEach(([c, rows]) => {
+    byCompany[c] = { billed: rows.filter(({ period }) => period.steps.every(Boolean)).length, total: rows.length };
   });
   const sorted = Object.entries(byCompany)
     .map(([label, { billed, total }]) => ({ label, billed, total }))

@@ -11,7 +11,7 @@ const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 // nominal categories (e.g. the contract-expiry timeline: expired/soon/
 // later/safe), pass per-item `color` in `data` instead of the `color` prop
 // — that's the one case where varying bar color is meaningful, not noise.
-export default function SingleSeriesBar({ title, data, color, dark, horizontal = false, valueSuffix = '' }) {
+export default function SingleSeriesBar({ title, data, color, dark, horizontal = false, valueSuffix = '', onBarClick }) {
   const perItemColor = data.length > 0 && data[0].color != null;
   const mutedText = chromeColor('mutedText', dark);
   const grid = chromeColor('grid', dark);
@@ -47,8 +47,12 @@ export default function SingleSeriesBar({ title, data, color, dark, horizontal =
               contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12 }}
               cursor={{ fill: grid, opacity: 0.5 }}
             />
-            <Bar dataKey="value" fill={color} radius={horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]} maxBarSize={22}>
-              {perItemColor && data.map(d => <Cell key={d.label} fill={d.color} />)}
+            <Bar
+              dataKey="value" fill={color} radius={horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]} maxBarSize={22}
+              onClick={onBarClick ? (_, index) => onBarClick(data[index]) : undefined}
+              style={{ cursor: onBarClick ? 'pointer' : 'default' }}
+            >
+              {perItemColor && data.map(d => <Cell key={d.label} fill={d.color} style={{ cursor: onBarClick ? 'pointer' : 'default' }} />)}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
