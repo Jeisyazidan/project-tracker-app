@@ -1,9 +1,10 @@
 import EmptyState from '../components/ui/EmptyState';
 import CmModal from '../components/modals/CmModal';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatDate } from '../utils/dates';
 import { createCm, updateCm, deleteCm } from '../api/cm';
 import { useAuth } from '../context/AuthContext';
+import { isRequestAssignedToUser } from '../utils/assignment';
 import ScheduleLine from '../components/ui/ScheduleLine';
 
 function statusStyle(status) {
@@ -83,8 +84,13 @@ function RequestCard({ r, canManage, onEdit, onDelete }) {
 }
 
 export default function CmPage({ requests, projects, users = [], onRefresh }) {
-  const { can } = useAuth();
+  const { user, can } = useAuth();
   const [modal, setModal] = useState({ open:false, cm:null });
+  const [scope, setScope] = useState('mine'); // 'mine' | 'all'
+
+  const visibleRequests = useMemo(() => (
+    scope === 'all' ? requests : requests.filter(r => isRequestAssignedToUser(r, user?.id))
+  ), [requests, scope, user]);
 
   const handleSave = async (data) => {
     if (modal.cm) await updateCm(modal.cm.id, data);
@@ -100,16 +106,24 @@ export default function CmPage({ requests, projects, users = [], onRefresh }) {
 
   return (
     <div>
-      {can('manage_cm') && (
-        <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:12 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, gap:10 }}>
+        <select
+          value={scope}
+          onChange={e => setScope(e.target.value)}
+          style={{ fontSize:12, padding:'4px 8px' }}
+        >
+          <option value="mine">Assigned to Me</option>
+          <option value="all">All Data</option>
+        </select>
+        {can('manage_cm') && (
           <button className="btn btn-primary" onClick={() => setModal({ open:true, cm:null })}>+ Add CM Request</button>
-        </div>
-      )}
-      {!requests.length
-        ? <EmptyState icon="🤝" message="No CM requests yet." />
+        )}
+      </div>
+      {!visibleRequests.length
+        ? <EmptyState icon="🤝" message={scope === 'mine' ? 'No CM requests assigned to you.' : 'No CM requests yet.'} />
         : (
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-            {requests.map(cm => (
+            {visibleRequests.map(cm => (
               <RequestCard
                 key={cm.id}
                 r={cm}

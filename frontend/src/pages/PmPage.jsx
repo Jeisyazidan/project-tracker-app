@@ -1,9 +1,10 @@
 import EmptyState from '../components/ui/EmptyState';
 import PmModal from '../components/modals/PmModal';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatDate } from '../utils/dates';
 import { createPm, updatePm, deletePm } from '../api/pm';
 import { useAuth } from '../context/AuthContext';
+import { isRequestAssignedToUser } from '../utils/assignment';
 import ScheduleLine from '../components/ui/ScheduleLine';
 
 function statusStyle(status) {
@@ -83,8 +84,13 @@ function RequestCard({ r, canManage, onEdit, onDelete }) {
 }
 
 export default function PmPage({ requests, projects, users = [], onRefresh }) {
-  const { can } = useAuth();
+  const { user, can } = useAuth();
   const [modal, setModal] = useState({ open:false, pm:null });
+  const [scope, setScope] = useState('mine'); // 'mine' | 'all'
+
+  const visibleRequests = useMemo(() => (
+    scope === 'all' ? requests : requests.filter(r => isRequestAssignedToUser(r, user?.id))
+  ), [requests, scope, user]);
 
   const handleSave = async (data) => {
     if (modal.pm) await updatePm(modal.pm.id, data);
@@ -100,16 +106,24 @@ export default function PmPage({ requests, projects, users = [], onRefresh }) {
 
   return (
     <div>
-      {can('manage_pm') && (
-        <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:12 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, gap:10 }}>
+        <select
+          value={scope}
+          onChange={e => setScope(e.target.value)}
+          style={{ fontSize:12, padding:'4px 8px' }}
+        >
+          <option value="mine">Assigned to Me</option>
+          <option value="all">All Data</option>
+        </select>
+        {can('manage_pm') && (
           <button className="btn btn-primary" onClick={() => setModal({ open:true, pm:null })}>+ Add PM Request</button>
-        </div>
-      )}
-      {!requests.length
-        ? <EmptyState icon="🔧" message="No PM requests yet." />
+        )}
+      </div>
+      {!visibleRequests.length
+        ? <EmptyState icon="🔧" message={scope === 'mine' ? 'No PM requests assigned to you.' : 'No PM requests yet.'} />
         : (
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-            {requests.map(pm => (
+            {visibleRequests.map(pm => (
               <RequestCard
                 key={pm.id}
                 r={pm}

@@ -5,6 +5,16 @@ import { mergePeriods } from '../utils/bastPeriods';
 import { getReminderLogs, triggerReminders } from '../api/reminders';
 import { useAuth } from '../context/AuthContext';
 
+// user ids who would plausibly care about this reminder — a project's
+// admin/manager/OM for contract & BAST reminders, a request's PICs for
+// CM/PM reminders — used to power the "Assigned to Me" filter.
+function assignedIdsFor(source) {
+  if (source.pic_utama_users || source.pic_support_users) {
+    return [...(source.pic_utama_users || []), ...(source.pic_support_users || [])].map(u => u.id);
+  }
+  return [source.project_admin_id, source.project_manager_id, source.operation_manager_id].filter(Boolean);
+}
+
 const TAB_LABELS = { projects:'Project Overview', bast:'BAST Billing', cm:'CM Meetings', pm:'PM Meetings' };
 
 const TYPE_LABELS = {
@@ -46,24 +56,25 @@ function buildReminders(projects, cmRequests, pmRequests) {
 
   projects.forEach(p => {
     if (p.status === 'Completed' || p.status === 'Not Started') return;
+    const assignedIds = assignedIdsFor(p);
     const diff = daysDiff(p.deadline);
-    if (diff !== null) push({ pid:p.pid, projectId:p.id, tab:'projects', company:p.company, diff, label:`Contract End: ${p.name}`, date:p.deadline });
+    if (diff !== null) push({ pid:p.pid, projectId:p.id, tab:'projects', company:p.company, diff, label:`Contract End: ${p.name}`, date:p.deadline, assignedIds });
 
     const stored = p.bast_stored_periods || [];
     mergePeriods(p, stored).filter(per => !per.steps.every(Boolean) && per.submit_deadline).forEach(per => {
       const d = daysDiff(per.submit_deadline);
-      if (d !== null) push({ pid:p.pid, projectId:p.id, tab:'bast', company:p.company, diff:d, label:`BAST Submit (${per.label}): ${p.name}`, date:per.submit_deadline });
+      if (d !== null) push({ pid:p.pid, projectId:p.id, tab:'bast', company:p.company, diff:d, label:`BAST Submit (${per.label}): ${p.name}`, date:per.submit_deadline, assignedIds });
     });
   });
 
   cmRequests.filter(c => c.status === 'Open' || c.status === 'In Progress').forEach(c => {
     const diff = daysDiff(c.start_date);
-    if (diff !== null) push({ pid:c.pid, projectId:c.project_id, tab:'cm', company:c.company, diff, label:`CM (${c.status}): ${c.title || c.project_name}`, date:c.start_date });
+    if (diff !== null) push({ pid:c.pid, projectId:c.project_id, tab:'cm', company:c.company, diff, label:`CM (${c.status}): ${c.title || c.project_name}`, date:c.start_date, assignedIds:assignedIdsFor(c) });
   });
 
   pmRequests.filter(r => r.status === 'Open' || r.status === 'In Progress').forEach(r => {
     const diff = daysDiff(r.start_date);
-    if (diff !== null) push({ pid:r.pid, projectId:r.project_id, tab:'pm', company:r.company, diff, label:`PM (${r.status}): ${r.title || r.project_name}`, date:r.start_date });
+    if (diff !== null) push({ pid:r.pid, projectId:r.project_id, tab:'pm', company:r.company, diff, label:`PM (${r.status}): ${r.title || r.project_name}`, date:r.start_date, assignedIds:assignedIdsFor(r) });
   });
 
   return { over, soon, up };
@@ -196,15 +207,29 @@ function ReminderLogSection({ isAdmin }) {
 
 export default function RemindersPage({ projects, cmRequests, pmRequests, onNavigate }) {
   const { user } = useAuth();
-  const { over, soon, up } = useMemo(
-    () => buildReminders(projects, cmRequests, pmRequests),
-    [projects, cmRequests, pmRequests]
-  );
+  const [scope, setScope] = useState('mine'); // 'mine' | 'all'
+
+  const { over, soon, up } = useMemo(() => {
+    const built = buildReminders(projects, cmRequests, pmRequests);
+    if (scope === 'all' || !user) return built;
+    const mine = arr => arr.filter(i => i.assignedIds.includes(user.id));
+    return { over: mine(built.over), soon: mine(built.soon), up: mine(built.up) };
+  }, [projects, cmRequests, pmRequests, scope, user]);
 
   return (
     <div>
+      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:12 }}>
+        <select
+          value={scope}
+          onChange={e => setScope(e.target.value)}
+          style={{ fontSize:12, padding:'4px 8px' }}
+        >
+          <option value="mine">Assigned to Me</option>
+          <option value="all">All Data</option>
+        </select>
+      </div>
       {!over.length && !soon.length && !up.length ? (
-        <EmptyState icon="✅" message="No reminders in the next 30 days." />
+        <EmptyState icon="✅" message={scope === 'mine' ? 'No reminders assigned to you in the next 30 days.' : 'No reminders in the next 30 days.'} />
       ) : (
         <>
           <ReminderGroup title="🔴 Overdue / Missed"        items={over} cls="overdue"  dot="dot-red"    onGo={onNavigate} />
