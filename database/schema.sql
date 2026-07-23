@@ -53,6 +53,7 @@ CREATE TABLE bast_periods (
 CREATE TABLE cm_requests (
   id             SERIAL PRIMARY KEY,
   project_id     INTEGER     NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  code           VARCHAR(60) NOT NULL UNIQUE,  -- e.g. CM-25-64-075-01, frozen at creation
   title          TEXT        NOT NULL,
   start_date     DATE,
   start_time     TIME,
@@ -71,6 +72,7 @@ CREATE TABLE cm_requests (
 CREATE TABLE pm_requests (
   id             SERIAL PRIMARY KEY,
   project_id     INTEGER     NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  code           VARCHAR(60) NOT NULL UNIQUE,  -- e.g. PM-25-64-075-01, frozen at creation
   title          TEXT        NOT NULL,
   start_date     DATE,
   start_time     TIME,
@@ -116,6 +118,7 @@ CREATE TABLE reminder_logs (
   reference_id   VARCHAR(200) NOT NULL,  -- 'contract' | '{label}:{urgency}' | request id as string
   send_count     INTEGER     NOT NULL DEFAULT 0,
   last_sent_at   TIMESTAMPTZ,
+  recipients     TEXT[]      NOT NULL DEFAULT '{}',  -- emails from the most recent send
   CONSTRAINT reminder_logs_unique UNIQUE (project_id, reminder_type, reference_id)
 );
 
