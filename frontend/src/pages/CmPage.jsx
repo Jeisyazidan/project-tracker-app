@@ -36,7 +36,10 @@ function RequestCard({ r, canManage, onEdit, onDelete }) {
       </div>
 
       {/* Title */}
-      <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{r.title || '—'}</div>
+      <div>
+        <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{r.title || '—'}</div>
+        {r.code && <div style={{ fontSize:10, color:'var(--text-subtle)', fontFamily:'monospace', marginTop:2 }}>{r.code}</div>}
+      </div>
 
       {/* Schedule + PIC grid */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px 16px' }}>
@@ -86,7 +89,7 @@ function RequestCard({ r, canManage, onEdit, onDelete }) {
 export default function CmPage({ requests, projects, users = [], onRefresh }) {
   const { user, can } = useAuth();
   const [modal, setModal] = useState({ open:false, cm:null });
-  const [scope, setScope] = useState('mine'); // 'mine' | 'all'
+  const [scope, setScope] = useState(user?.role === 'admin' ? 'all' : 'mine'); // 'mine' | 'all'
 
   const visibleRequests = useMemo(() => (
     scope === 'all' ? requests : requests.filter(r => isRequestAssignedToUser(r, user?.id))

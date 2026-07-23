@@ -96,13 +96,16 @@ export default function UserMgmtModal({ open, onClose }) {
     const { id, type, value, value2 } = editField;
     try {
       if (type === 'phone') {
+        if (!confirm('Update this user\'s WhatsApp number?')) return;
         await updatePhone(id, value);
       } else if (type === 'email') {
         if (!value.trim()) return alert('Email is required');
+        if (!confirm('Update this user\'s email address? Notification emails will be sent to both the old and new address.')) return;
         await updateEmail(id, value.trim());
       } else if (type === 'password') {
         if (value.length < 6) return alert('Password must be at least 6 characters');
         if (value !== value2) return alert('Passwords do not match');
+        if (!confirm('Reset this user\'s password?')) return;
         await changePassword(id, value);
       }
       setEditField(null);

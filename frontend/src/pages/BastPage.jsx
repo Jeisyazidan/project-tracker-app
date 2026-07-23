@@ -41,11 +41,11 @@ function PeriodCard({ project, period, periodIdx, canEdit, onToggleStep, onSetAl
   const statusLabel = stepsDoneLabel(period.steps);
   const statusCls   = allDone ? 'badge-green' : stepsDone > 0 ? 'badge-yellow' : 'badge-gray';
   const borderColor = period.is_custom ? '#ddd6fe' : allDone ? '#bbf7d0' : stepsDone > 0 ? '#fde68a' : '#e5e7eb';
-  const headerBg    = period.is_custom ? '#f5f3ff' : allDone ? '#f0fdf4' : stepsDone > 0 ? '#fffbeb' : '#fafafa';
+  const statusClass  = period.is_custom ? 'status-custom' : allDone ? 'status-done' : stepsDone > 0 ? 'status-progress' : '';
 
   return (
     <div style={{ border:`1px solid ${borderColor}`, borderRadius:10, marginBottom:8, overflow:'hidden' }}>
-      <div style={{ background:headerBg }}>
+      <div className={`bast-period-header${statusClass ? ' ' + statusClass : ''}`}>
         <div style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 14px' }}>
           <div onClick={() => setOpen(o => !o)} style={{ display:'flex', alignItems:'center', gap:10, flex:1, cursor:'pointer', minWidth:0 }}>
             <div style={{ width:28, height:28, borderRadius:'50%', background: period.is_custom ? '#7c3aed' : perColor, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:11, fontWeight:700, color:'white' }}>{periodIdx + 1}</div>

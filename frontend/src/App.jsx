@@ -49,8 +49,11 @@ export default function App() {
   const [issueModal,   setIssueModal]   = useState({ open:false, project:null });
   const [requestModal, setRequestModal] = useState({ open:false, type:null, project:null });
 
-  const loadAll = useCallback(async () => {
-    setDataLoading(true);
+  // silent=true skips the full-screen "Loading data…" state, which would
+  // otherwise unmount the current tab (and any local UI state, e.g. expanded
+  // BAST period cards) on every small in-place update.
+  const loadAll = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setDataLoading(true);
     try {
       const [ps, cms, pms, ul] = await Promise.all([getProjects(), getCmRequests(), getPmRequests(), getUsersList()]);
       setProjects(ps);
@@ -60,9 +63,11 @@ export default function App() {
     } catch (err) {
       console.error('Load error:', err);
     } finally {
-      setDataLoading(false);
+      if (!silent) setDataLoading(false);
     }
   }, []);
+
+  const refreshSilently = useCallback(() => loadAll({ silent: true }), [loadAll]);
 
   useEffect(() => {
     if (user) loadAll();
@@ -200,20 +205,20 @@ export default function App() {
               <RemindersPage projects={filtered} cmRequests={filteredCm} pmRequests={filteredPm} onNavigate={handleNavigateFromReminder} />
             )}
             {tab === 'bast' && (
-              <BastPage projects={filtered} onProjectEdit={p => setProjectModal({ open:true, project:p })} onRefresh={loadAll} />
+              <BastPage projects={filtered} onProjectEdit={p => setProjectModal({ open:true, project:p })} onRefresh={refreshSilently} />
             )}
             {tab === 'cm' && (
-              <CmPage requests={filteredCm} projects={projects} users={usersList} onRefresh={loadAll} />
+              <CmPage requests={filteredCm} projects={projects} users={usersList} onRefresh={refreshSilently} />
             )}
             {tab === 'pm' && (
-              <PmPage requests={filteredPm} projects={projects} users={usersList} onRefresh={loadAll} />
+              <PmPage requests={filteredPm} projects={projects} users={usersList} onRefresh={refreshSilently} />
             )}
             {tab === 'insights' && (
               <InsightsPage projects={projects} cmRequests={cmRequests} pmRequests={pmRequests} usersList={usersList} />
             )}
             {tab === 'access' && <AccessControlPage />}
             {tab === 'reminderSettings' && (
-              <ReminderSettingsPage projects={projects} onRefresh={loadAll} />
+              <ReminderSettingsPage projects={projects} onRefresh={refreshSilently} />
             )}
           </>
         )}

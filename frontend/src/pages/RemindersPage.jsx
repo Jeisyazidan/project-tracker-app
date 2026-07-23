@@ -188,6 +188,9 @@ function ReminderLogSection({ isAdmin }) {
                     <div style={{ color:'var(--text-muted)', fontSize:11 }}>
                       {formatRefId(log.reminder_type, log.reference_id)}
                     </div>
+                    <div style={{ color:'var(--text-subtle)', fontSize:10, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={(log.recipients || []).join(', ')}>
+                      To: {(log.recipients || []).length ? log.recipients.join(', ') : '—'}
+                    </div>
                   </div>
                   <div style={{ textAlign:'right', whiteSpace:'nowrap', color:'var(--text-muted)' }}>
                     <div>×{log.send_count}</div>
@@ -207,7 +210,7 @@ function ReminderLogSection({ isAdmin }) {
 
 export default function RemindersPage({ projects, cmRequests, pmRequests, onNavigate }) {
   const { user } = useAuth();
-  const [scope, setScope] = useState('mine'); // 'mine' | 'all'
+  const [scope, setScope] = useState(user?.role === 'admin' ? 'all' : 'mine'); // 'mine' | 'all'
 
   const { over, soon, up } = useMemo(() => {
     const built = buildReminders(projects, cmRequests, pmRequests);

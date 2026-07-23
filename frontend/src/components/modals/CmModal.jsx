@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Modal from '../ui/Modal';
 import MultiUserSelect from '../ui/MultiUserSelect';
+import SearchSelect from '../ui/SearchSelect';
 import { todayISO, nowTime } from '../../utils/dates';
 
 const EMPTY = {
@@ -38,11 +39,16 @@ export default function CmModal({ open, cm, projects, users = [], onSave, onClos
 
   const set = key => e => setForm(f => ({ ...f, [key]: e.target.value }));
 
+  const projectOptions = useMemo(() => projects.map(p => ({
+    value: String(p.id), label: `${p.pid} — ${p.company}`,
+  })), [projects]);
+
   const handleSave = async () => {
     if (!form.project_id || !form.title.trim() || !form.start_date) {
       setError('Project, Description, and From Date are required.');
       return;
     }
+    if (cm && !confirm('Save changes to this CM request?')) return;
     setSaving(true);
     setError('');
     try {
@@ -63,11 +69,13 @@ export default function CmModal({ open, cm, projects, users = [], onSave, onClos
       <div className="form-grid">
         <div className="form-group full">
           <label>Project *</label>
-          <select value={form.project_id} onChange={set('project_id')} disabled={!!cm} style={{ fontSize: 12 }}>
-            {projects.map(p => (
-              <option key={p.id} value={p.id}>{p.pid} — {p.company.substring(0, 35)}</option>
-            ))}
-          </select>
+          <SearchSelect
+            options={projectOptions}
+            value={form.project_id}
+            onChange={val => setForm(f => ({ ...f, project_id: val }))}
+            disabled={!!cm}
+            placeholder="— Select project —"
+          />
         </div>
         <div className="form-group"><label>From Date *</label><input type="date" value={form.start_date} onChange={set('start_date')} /></div>
         <div className="form-group"><label>From Time</label><input type="time" value={form.start_time} onChange={set('start_time')} /></div>

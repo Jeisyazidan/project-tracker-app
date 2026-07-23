@@ -47,7 +47,7 @@ export default function ReminderSettingsPage({ projects = [], onRefresh }) {
           {REMINDER_TYPES.map(t => {
             const checked = settings[t.key] !== false;
             return (
-              <label key={t.key} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', background: checked ? '#f0fdf4' : 'var(--surface2)', border:`1px solid ${checked ? '#bbf7d0' : 'var(--border)'}`, borderRadius:8, cursor:'pointer', transition:'background .15s' }}>
+              <label key={t.key} className={`toggle-item${checked ? ' checked' : ''}`} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:8, cursor:'pointer', transition:'background .15s' }}>
                 <input type="checkbox" checked={checked} onChange={e => toggleType(t.key, e.target.checked)} style={{ width:15, height:15, accentColor:'#16a34a', cursor:'pointer' }} />
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:12, fontWeight:600, color:'var(--text)' }}>{t.label}</div>

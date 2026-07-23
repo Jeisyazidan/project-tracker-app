@@ -166,7 +166,7 @@ export default function DashboardPage({ users = [] }) {
     const d = new Date();
     return { month: d.getMonth() + 1, year: d.getFullYear() };
   });
-  const [viewMode, setViewMode]   = useState('me'); // 'me' | 'all' (admin only)
+  const [viewMode, setViewMode]   = useState(isAdmin ? 'all' : 'me'); // 'me' | 'all' (admin only)
   const [sortBy, setSortBy]       = useState('date'); // 'date' | 'name' | 'role' (viewMode 'all' only)
   const [nameFilter, setNameFilter] = useState(''); // (viewMode 'all' only)
   const [data, setData]         = useState(null);

@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Modal from '../ui/Modal';
+import SearchSelect from '../ui/SearchSelect';
 
 const EMPTY = {
   pid:'', company:'', name:'', status:'On Track',
@@ -38,11 +39,17 @@ export default function ProjectModal({ open, project, users = [], onSave, onClos
 
   const set = key => e => setForm(f => ({ ...f, [key]: e.target.value }));
 
+  const userOptions = useMemo(() => [
+    { value: '', label: '— Select user —' },
+    ...users.map(u => ({ value: String(u.id), label: u.username, sublabel: u.role })),
+  ], [users]);
+
   const handleSave = async () => {
     if (!form.pid.trim() || !form.company.trim() || !form.name.trim()) {
       setError('PID, Company, and Project Description are required.');
       return;
     }
+    if (project && !confirm('Save changes to this project?')) return;
     setSaving(true);
     setError('');
     try {
@@ -108,24 +115,30 @@ export default function ProjectModal({ open, project, users = [], onSave, onClos
         </div>
         <div className="form-group">
           <label>Project Admin</label>
-          <select value={form.project_admin_id} onChange={set('project_admin_id')}>
-            <option value="">— Select user —</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.username} ({u.role})</option>)}
-          </select>
+          <SearchSelect
+            options={userOptions}
+            value={form.project_admin_id}
+            onChange={val => setForm(f => ({ ...f, project_admin_id: val }))}
+            placeholder="— Select user —"
+          />
         </div>
         <div className="form-group">
           <label>Project Manager</label>
-          <select value={form.project_manager_id} onChange={set('project_manager_id')}>
-            <option value="">— Select user —</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.username} ({u.role})</option>)}
-          </select>
+          <SearchSelect
+            options={userOptions}
+            value={form.project_manager_id}
+            onChange={val => setForm(f => ({ ...f, project_manager_id: val }))}
+            placeholder="— Select user —"
+          />
         </div>
         <div className="form-group">
           <label>Operation Manager</label>
-          <select value={form.operation_manager_id} onChange={set('operation_manager_id')}>
-            <option value="">— Select user —</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.username} ({u.role})</option>)}
-          </select>
+          <SearchSelect
+            options={userOptions}
+            value={form.operation_manager_id}
+            onChange={val => setForm(f => ({ ...f, operation_manager_id: val }))}
+            placeholder="— Select user —"
+          />
         </div>
         <div className="form-group">
           <label>Handover Status</label>
