@@ -31,30 +31,31 @@ async function getReminderSettings() {
   return map;
 }
 
-async function markSent(projectId, reminderType, referenceId) {
+async function markSent(projectId, reminderType, referenceId, recipients = []) {
   await db.query(
-    `INSERT INTO reminder_logs (project_id, reminder_type, reference_id, send_count, last_sent_at)
-     VALUES ($1,$2,$3,1,NOW())
+    `INSERT INTO reminder_logs (project_id, reminder_type, reference_id, send_count, last_sent_at, recipients)
+     VALUES ($1,$2,$3,1,NOW(),$4)
      ON CONFLICT ON CONSTRAINT reminder_logs_unique DO UPDATE SET
        send_count   = reminder_logs.send_count + 1,
-       last_sent_at = NOW()`,
-    [projectId, reminderType, referenceId]
+       last_sent_at = NOW(),
+       recipients   = EXCLUDED.recipients`,
+    [projectId, reminderType, referenceId, [...new Set(recipients)]]
   );
 }
 
-// Sends one email per unique recipient; returns true if at least one succeeded
+// Sends one email per unique recipient; returns the list of addresses that succeeded
 async function dispatch(recipients, subject, html, text) {
-  let anyOk = false;
+  const sent = [];
   for (const email of [...new Set(recipients)]) {
     try {
       await sendMail({ to: email, subject, html, text });
       console.log(`[reminder] sent "${subject}" → ${email}`);
-      anyOk = true;
+      sent.push(email);
     } catch (err) {
       console.error(`[reminder] failed to send to ${email}:`, err.message);
     }
   }
-  return anyOk;
+  return sent;
 }
 
 function calendarDate(ts) {
@@ -130,8 +131,8 @@ async function checkContractEnd() {
         actionItems: ['Review contract details', 'Coordinate with stakeholders', 'Prepare renewal or project closure plan'],
       });
 
-      const ok = await dispatch(emails, subject, html, text);
-      if (ok) await markSent(p.id, 'contract_end', `contract:${bucket}`);
+      const sent = await dispatch(emails, subject, html, text);
+      if (sent.length) await markSent(p.id, 'contract_end', `contract:${bucket}`, sent);
     }
   }
 }
@@ -203,8 +204,8 @@ async function checkBastSubmit() {
       actionItems: ['Complete the remaining checklist items', 'Submit before the deadline'],
     });
 
-    const ok = await dispatch(emails, subject, html, text);
-    if (ok) await markSent(period.project_id, 'bast_submit', referenceId);
+    const sent = await dispatch(emails, subject, html, text);
+    if (sent.length) await markSent(period.project_id, 'bast_submit', referenceId, sent);
   }
 }
 
@@ -219,9 +220,9 @@ async function checkActivityReminders(type) {
 
   const { rows } = await db.query(`
     SELECT
-      r.id, r.project_id, r.title, r.status,
+      r.id, r.project_id, r.code, r.title, r.status,
       r.start_date::text, r.end_date::text, r.start_time::text, r.end_time::text,
-      p.pid, p.name, p.company,
+      p.pid, p.name, p.company, p.project_manager_id, p.operation_manager_id,
       (r.start_date - CURRENT_DATE) AS days_until,
       COALESCE(pic_utama_agg.users, '[]'::json)   AS pic_utama_users,
       COALESCE(pic_support_agg.users, '[]'::json) AS pic_support_users
@@ -246,7 +247,12 @@ async function checkActivityReminders(type) {
       if (lastDate >= todayDate()) continue;
     }
 
-    const picIds = [...req.pic_utama_users, ...req.pic_support_users].map(u => u.id);
+    const picIds = [...new Set([
+      ...req.pic_utama_users.map(u => u.id),
+      ...req.pic_support_users.map(u => u.id),
+      req.project_manager_id,
+      req.operation_manager_id,
+    ].filter(Boolean))];
     const emails = (await Promise.all(picIds.map(lookupEmail))).filter(Boolean);
 
     if (!emails.length) {
@@ -255,7 +261,7 @@ async function checkActivityReminders(type) {
     }
 
     const days = parseInt(req.days_until, 10);
-    const subject = `⏰ [${shortLabel} Reminder] ${req.title} — starts in ${days} day(s)`;
+    const subject = `⏰ [${shortLabel} Reminder] ${req.code ? req.code + ' — ' : ''}${req.title} — starts in ${days} day(s)`;
     const { html, text } = renderEmail({
       tone: 'orange',
       heading: `${typeLabel} Reminder`,
@@ -266,6 +272,7 @@ async function checkActivityReminders(type) {
       ],
       infoCardTitle: 'Activity Information',
       infoFields: [
+        ['Activity ID', req.code],
         ['Project', req.name],
         ['Activity', req.title],
         ['Schedule', formatSchedule(req.start_date, req.start_time, req.end_date, req.end_time)],
@@ -274,8 +281,8 @@ async function checkActivityReminders(type) {
       actionItems: ['Prepare for implementation', 'Confirm readiness with your team', 'Update progress in Project Tracker'],
     });
 
-    const ok = await dispatch(emails, subject, html, text);
-    if (ok) await markSent(req.project_id, reminderType, referenceId);
+    const sent = await dispatch(emails, subject, html, text);
+    if (sent.length) await markSent(req.project_id, reminderType, referenceId, sent);
   }
 }
 

@@ -2,7 +2,7 @@ const router  = require('express').Router();
 const bcrypt  = require('bcrypt');
 const db      = require('../db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
-const { sendWelcomeEmail } = require('../services/email');
+const { sendWelcomeEmail, sendEmailChangeNotice } = require('../services/email');
 
 // GET /api/users/list — minimal list for dropdowns; any authenticated user
 router.get('/list', requireAuth, async (req, res) => {
@@ -104,11 +104,23 @@ router.put('/:id/email', async (req, res) => {
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'Valid email address is required' });
   }
+  const newEmail = email.trim().toLowerCase();
   try {
+    const { rows: existing } = await db.query(
+      'SELECT username, email, role FROM users WHERE id=$1', [id]
+    );
+    if (!existing.length) return res.status(404).json({ error: 'User not found' });
+    const oldEmail = existing[0].email;
+
     const { rowCount } = await db.query(
-      'UPDATE users SET email=$1 WHERE id=$2', [email.trim().toLowerCase(), id]
+      'UPDATE users SET email=$1 WHERE id=$2', [newEmail, id]
     );
     if (!rowCount) return res.status(404).json({ error: 'User not found' });
+
+    if (oldEmail !== newEmail) {
+      sendEmailChangeNotice({ user: { username: existing[0].username, role: existing[0].role }, oldEmail, newEmail })
+        .catch(e => console.warn('Email change notice failed:', e.message));
+    }
     res.json({ ok: true });
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'That email is already taken' });

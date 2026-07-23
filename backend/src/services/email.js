@@ -74,6 +74,60 @@ async function sendWelcomeEmail(user) {
   return sendMail({ to: user.email, subject: '👋 Welcome to Project Tracker', html, text });
 }
 
+// Notify the old and new address when an admin changes a user's email.
+async function sendEmailChangeNotice({ user, oldEmail, newEmail }) {
+  const roleLabel = formatRole(user.role);
+
+  if (oldEmail) {
+    const { html, text } = renderEmail({
+      tone: 'orange',
+      heading: 'Your Email Address Was Changed',
+      badge: { label: 'Security Notice', tone: 'orange' },
+      greetingHtml: `Hello <strong>${esc(user.username)}</strong>,`,
+      introHtml: [
+        `This is to let you know that the email address on your Project Tracker account was changed.`,
+        `You will no longer receive notifications at this address.`,
+      ],
+      infoCardTitle: 'Change Details',
+      infoFields: [
+        ['Username', user.username],
+        ['Role', roleLabel],
+        ['Previous Email', oldEmail],
+        ['New Email', newEmail],
+      ],
+      outroHtml: [`If you did not request this change, please contact an administrator immediately.`],
+    });
+    sendMail({ to: oldEmail, subject: '⚠️ Your Project Tracker email address was changed', html, text })
+      .then(() => console.log(`[email] change-notice (old) sent → ${oldEmail}`))
+      .catch(err => console.warn(`[email] change-notice (old) failed → ${oldEmail}:`, err.message));
+  }
+
+  const perms = await getRolePermissions(user.role);
+  const notifications = relevantNotifications(perms);
+  const { html, text } = renderEmail({
+    tone: 'blue',
+    heading: 'Email Address Updated',
+    badge: { label: 'Account Updated' },
+    greetingHtml: `Hello <strong>${esc(user.username)}</strong>,`,
+    introHtml: [
+      `This email address has been added to a Project Tracker account.`,
+      `You'll now receive notifications and reminders at this address.`,
+    ],
+    infoCardTitle: 'Account Information',
+    infoFields: [
+      ['Username', user.username],
+      ['Role', roleLabel],
+      ['Email', newEmail],
+    ],
+    extraHtml: [bulletListHtml("You'll Receive Notifications For", notifications, '🔔')],
+    extraText: [bulletListText("You'll Receive Notifications For", notifications)],
+    outroHtml: [`If you don't recognize this change, please contact an administrator immediately.`],
+  });
+  sendMail({ to: newEmail, subject: '✅ This email was added to your Project Tracker account', html, text })
+    .then(() => console.log(`[email] change-notice (new) sent → ${newEmail}`))
+    .catch(err => console.warn(`[email] change-notice (new) failed → ${newEmail}:`, err.message));
+}
+
 async function lookupEmailById(userId) {
   if (!userId) return null;
   const { rows } = await db.query('SELECT email FROM users WHERE id = $1', [userId]);
@@ -83,7 +137,7 @@ async function lookupEmailById(userId) {
 // Send assignment/reassignment notification for a CM or PM activity.
 // recipients: array of email addresses to notify (already resolved and
 // filtered to newly-assigned only by the caller).
-async function sendAssignmentEmail({ type, isNew, title, project, startDate, startTime, endDate, endTime, status, picUtamaName, picSupportName, notes, recipients }) {
+async function sendAssignmentEmail({ type, isNew, code, title, project, startDate, startTime, endDate, endTime, status, picUtamaName, picSupportName, notes, recipients }) {
   if (!recipients || !recipients.length) return;
 
   const typeLabel = type === 'cm' ? 'Corrective Maintenance' : 'Preventive Maintenance';
@@ -91,7 +145,7 @@ async function sendAssignmentEmail({ type, isNew, title, project, startDate, sta
   const introLine = isNew
     ? `You've been assigned to a new ${typeLabel.toLowerCase()} activity. Here are the details:`
     : `You've been reassigned to an existing ${typeLabel.toLowerCase()} activity. Here are the details:`;
-  const subject = `${type === 'cm' ? '🔄' : '🚨'} [${shortLabel} Assignment] ${title} — ${project.name} (${project.pid})`;
+  const subject = `${type === 'cm' ? '🔄' : '🚨'} [${shortLabel} Assignment] ${code ? code + ' — ' : ''}${title} — ${project.name} (${project.pid})`;
 
   const { html, text } = renderEmail({
     tone: 'blue',
@@ -103,6 +157,7 @@ async function sendAssignmentEmail({ type, isNew, title, project, startDate, sta
     ],
     infoCardTitle: 'Activity Information',
     infoFields: [
+      ['Activity ID', code],
       ['Project', project.name],
       ['Activity', title],
       ['Schedule', formatSchedule(startDate, startTime, endDate, endTime)],
@@ -121,4 +176,40 @@ async function sendAssignmentEmail({ type, isNew, title, project, startDate, sta
   }
 }
 
-module.exports = { sendMail, sendWelcomeEmail, lookupEmailById, sendAssignmentEmail };
+// Notify PICs who were removed from a CM or PM activity.
+// recipients: array of email addresses to notify (already resolved and
+// filtered to newly-removed only by the caller).
+async function sendUnassignmentEmail({ type, code, title, project, startDate, startTime, endDate, endTime, status, recipients }) {
+  if (!recipients || !recipients.length) return;
+
+  const typeLabel = type === 'cm' ? 'Corrective Maintenance' : 'Preventive Maintenance';
+  const shortLabel = type.toUpperCase();
+  const subject = `➖ [${shortLabel} Unassignment] ${code ? code + ' — ' : ''}${title} — ${project.name} (${project.pid})`;
+
+  const { html, text } = renderEmail({
+    tone: 'orange',
+    heading: `${typeLabel} Unassignment`,
+    badge: { label: 'Removed From Activity', tone: 'orange' },
+    greetingHtml: `Hi there,`,
+    introHtml: [
+      `You've been removed from a ${typeLabel.toLowerCase()} activity. You will no longer receive updates for it.`,
+    ],
+    infoCardTitle: 'Activity Information',
+    infoFields: [
+      ['Activity ID', code],
+      ['Project', project.name],
+      ['Activity', title],
+      ['Schedule', formatSchedule(startDate, startTime, endDate, endTime)],
+      ['Status', status],
+    ],
+    outroHtml: [`If you believe this was a mistake, please contact your project manager or an administrator.`],
+  });
+
+  for (const email of [...new Set(recipients)]) {
+    sendMail({ to: email, subject, html, text })
+      .then(() => console.log(`[email] unassignment sent → ${email}`))
+      .catch(err => console.warn(`[email] unassignment failed → ${email}:`, err.message));
+  }
+}
+
+module.exports = { sendMail, sendWelcomeEmail, sendEmailChangeNotice, lookupEmailById, sendAssignmentEmail, sendUnassignmentEmail };

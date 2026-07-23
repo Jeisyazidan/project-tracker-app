@@ -2,8 +2,9 @@ const router = require('express').Router();
 const db     = require('../db');
 const { requireAuth }       = require('../middleware/auth');
 const { requirePermission } = require('../middleware/rbac');
-const { sendAssignmentEmail } = require('../services/email');
+const { sendAssignmentEmail, sendUnassignmentEmail } = require('../services/email');
 const { picJoinClauses, picSelectFields, toIdArray, replaceRequestPics } = require('../utils/picSql');
+const { nextRequestCode } = require('../utils/requestCode');
 
 const PIC_TABLE = 'cm_request_pics';
 
@@ -45,17 +46,21 @@ router.post('/', requirePermission('manage_cm'), async (req, res) => {
   const utamaIds   = toIdArray(pic_utama_ids);
   const supportIds = toIdArray(pic_support_ids);
   try {
-    const [{ rows: prows }, { rows: insRows }] = await Promise.all([
-      db.query('SELECT pid, name, company FROM projects WHERE id=$1', [project_id]),
-      db.query(
-        `INSERT INTO cm_requests
-           (project_id,title,start_date,start_time,end_date,end_time,status,resolved_date,notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         RETURNING id`,
-        [project_id, title, start_date, start_time || null, end_date || null, end_time || null,
-         status || 'Open', resolved_date || null, notes || null]
-      ),
-    ]);
+    const { rows: prows } = await db.query(
+      'SELECT pid, name, company, project_manager_id, operation_manager_id FROM projects WHERE id=$1',
+      [project_id]
+    );
+    if (!prows[0]) return res.status(404).json({ error: 'Project not found' });
+
+    const code = await nextRequestCode(db, 'cm_requests', 'CM', project_id, prows[0].pid);
+    const { rows: insRows } = await db.query(
+      `INSERT INTO cm_requests
+         (project_id,code,title,start_date,start_time,end_date,end_time,status,resolved_date,notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING id`,
+      [project_id, code, title, start_date, start_time || null, end_date || null, end_time || null,
+       status || 'Open', resolved_date || null, notes || null]
+    );
     const newId = insRows[0].id;
     await replaceRequestPics(db, PIC_TABLE, newId, utamaIds, supportIds);
 
@@ -70,11 +75,12 @@ router.post('/', requirePermission('manage_cm'), async (req, res) => {
     `, [newId]);
     res.status(201).json(rows[0]);
 
-    const allIds = [...new Set([...utamaIds, ...supportIds])];
+    const inChargeIds = [prows[0]?.project_manager_id, prows[0]?.operation_manager_id].filter(Boolean);
+    const allIds = [...new Set([...utamaIds, ...supportIds, ...inChargeIds])];
     if (allIds.length && prows[0]) {
       const { rows: urows } = await db.query('SELECT id, username, email FROM users WHERE id = ANY($1::int[])', [allIds]);
       const byId = Object.fromEntries(urows.map(u => [u.id, u]));
-      sendAssignmentEmail({ type:'cm', isNew:true, title, project:prows[0],
+      sendAssignmentEmail({ type:'cm', isNew:true, code, title, project:prows[0],
         startDate:start_date, startTime:start_time, endDate:end_date, endTime:end_time,
         status: status || 'Open',
         picUtamaName: utamaIds.map(id => byId[id]?.username).filter(Boolean).join(', ') || null,
@@ -82,6 +88,7 @@ router.post('/', requirePermission('manage_cm'), async (req, res) => {
         notes, recipients: allIds.map(id => byId[id]?.email).filter(Boolean) });
     }
   } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Code collision, please retry' });
     console.error('POST /cm error:', err);
     res.status(500).json({ error: 'Server error' });
   }
@@ -102,7 +109,7 @@ router.put('/:id', requirePermission('manage_cm'), async (req, res) => {
   try {
     const [{ rows: oldPicRows }, { rows: prows }, { rows: existsRows }] = await Promise.all([
       db.query('SELECT user_id, relation FROM cm_request_pics WHERE request_id=$1', [id]),
-      db.query(`SELECT p.pid, p.name, p.company FROM cm_requests c JOIN projects p ON p.id=c.project_id WHERE c.id=$1`, [id]),
+      db.query(`SELECT c.code, p.pid, p.name, p.company FROM cm_requests c JOIN projects p ON p.id=c.project_id WHERE c.id=$1`, [id]),
       db.query('SELECT id FROM cm_requests WHERE id=$1', [id]),
     ]);
     if (!existsRows[0]) return res.status(404).json({ error: 'CM request not found' });
@@ -136,15 +143,23 @@ router.put('/:id', requirePermission('manage_cm'), async (req, res) => {
       ...supportIds.filter(uid => !oldSupportIds.includes(uid)),
     ])];
     const allCurrentIds = [...new Set([...utamaIds, ...supportIds])];
+    const removedIds = [...new Set([...oldUtamaIds, ...oldSupportIds])].filter(uid => !allCurrentIds.includes(uid));
     if (newlyAssignedIds.length && prows[0]) {
       const { rows: urows } = await db.query('SELECT id, username, email FROM users WHERE id = ANY($1::int[])', [allCurrentIds]);
       const byId = Object.fromEntries(urows.map(u => [u.id, u]));
-      sendAssignmentEmail({ type:'cm', isNew:false, title, project:prows[0],
+      sendAssignmentEmail({ type:'cm', isNew:false, code:prows[0].code, title, project:prows[0],
         startDate:start_date, startTime:start_time, endDate:end_date, endTime:end_time,
         status: status || 'Open',
         picUtamaName: utamaIds.map(id => byId[id]?.username).filter(Boolean).join(', ') || null,
         picSupportName: supportIds.map(id => byId[id]?.username).filter(Boolean).join(', ') || null,
         notes, recipients: newlyAssignedIds.map(id => byId[id]?.email).filter(Boolean) });
+    }
+    if (removedIds.length && prows[0]) {
+      const { rows: rrows } = await db.query('SELECT id, email FROM users WHERE id = ANY($1::int[])', [removedIds]);
+      sendUnassignmentEmail({ type:'cm', code:prows[0].code, title, project:prows[0],
+        startDate:start_date, startTime:start_time, endDate:end_date, endTime:end_time,
+        status: status || 'Open',
+        recipients: rrows.map(u => u.email).filter(Boolean) });
     }
   } catch (err) {
     console.error('PUT /cm/:id error:', err);

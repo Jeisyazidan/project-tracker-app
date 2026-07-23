@@ -57,7 +57,7 @@ router.get('/logs', requireAuth, async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT rl.id, rl.project_id, rl.reminder_type, rl.reference_id,
-             rl.send_count, rl.last_sent_at,
+             rl.send_count, rl.last_sent_at, rl.recipients,
              p.pid, p.name AS project_name, p.company
       FROM reminder_logs rl
       JOIN projects p ON p.id = rl.project_id
