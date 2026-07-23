@@ -11,16 +11,20 @@ An internal web application for managing IT service contracts, BAST billing peri
 | Database | PostgreSQL |
 | Auth | JWT (httpOnly cookie) |
 | Email | Nodemailer (SMTP) |
+| WhatsApp | Fonnte API (optional) |
 | Scheduler | node-cron |
 
 ## Features
 
 - **Project & Contract Management** — Track IT service contracts with start/end dates, billing frequency, and handover status
 - **BAST Billing Periods** — Auto-generated billing period schedule with step checklists, custom termins, and submit deadlines
-- **Change Management (CM)** — Log and track CM requests with status and PIC assignment
-- **Problem Management (PM)** — Log and track PM requests similarly to CM
-- **Automated Reminders** — Email alerts for contract end dates (60d/30d/7d) and overdue CM/PM activity
+- **Change Management (CM) & Problem Management (PM)** — Log and track requests with status, PIC Utama/Support assignment, and a unique per-project activity code (e.g. `CM-25-64-075-01`)
+- **My Dashboard** — Personal and admin-wide monthly calendar of upcoming CM/PM activity, BAST deadlines, and contract end dates
+- **Insights** — Charts for project health, BAST billing status, CM/PM activity, and client breakdown, with click-to-drill-down detail
+- **Automated Reminders** — Email (and optional WhatsApp) alerts for contract end dates (60d/30d/7d), BAST submit deadlines, and approaching/overdue CM/PM activity — cc'd to the project's PM/OM, deduplicated per threshold, with a searchable send log
+- **Account Change Notifications** — Both the old and new address are notified when a user's email is changed; PICs are notified when assigned to or removed from an activity
 - **Role-Based Access Control** — Six roles with runtime-editable permissions via the Access Control page
+- **Dark Mode** — Full light/dark theme toggle
 - **Export** — Export data to XLSX
 
 ## Quick Start
