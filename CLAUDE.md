@@ -8,7 +8,7 @@ A project-tracking web app for managing IT service contracts, BAST billing perio
 
 **Stack:** React 18 + Vite (frontend) · Express.js + `pg` (backend) · PostgreSQL (database) · nodemailer (email) · Fonnte WhatsApp API · node-cron (scheduler) · Docker + nginx (deployment)
 
-**Production URL:** `http://pwtracker.sislab.com` (30.30.30.124)
+**Production URL:** internal only — see ops/deployment config, not documented here
 
 ---
 
@@ -141,7 +141,7 @@ Three services defined in `docker-compose.yml`:
 - All services have `restart: unless-stopped` — they survive server reboots automatically.
 - `database/schema.sql` is mounted into postgres's init directory and runs once on a fresh volume.
 - The frontend container is nginx serving the Vite build + proxying `/api/` to `backend:3001`.
-- `frontend/nginx.conf` sets `server_name pwtracker.sislab.com 30.30.30.124`.
+- `frontend/nginx.conf` sets `server_name` to the production host (kept out of this file — see the file itself, which is deployment config rather than documentation).
 
 ---
 
